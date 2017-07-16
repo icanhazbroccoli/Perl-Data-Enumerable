@@ -42,6 +42,13 @@ has max_attempts => (
   default => sub { 10 },
 );
 
+has backlog_strategy => (
+  is => 'ro',
+  isa => enum([qw(fifo lifo immediate)]),
+  lazy => 1,
+  default => sub { 'fifo' },
+);
+
 has retry_strategy => (
   is => 'ro',
   isa => enum([qw(basic linear progressive)]),
@@ -76,7 +83,13 @@ sub next {
   my $has_next = $self->has_next;
   my $has_backlog = scalar(@{ $self->_backlog }) > 0;
   return empty
-    unless $has_next || $has_backlog;
+    unless $has_next or $has_backlog;
+  if ($has_backlog) {
+    my $retry_item_ix = ($self->backlog_strategy eq 'lifo') ? scalar(@{ $self->_backlog }) - 1 : 0;
+    my $retry_item = $self->_backlog->[ $retry_item_ix ];
+    my $ready_to_retry = $self->_should_retry($retry_item);
+    #TODO
+  }
   eval {
     $res = $self->on_next(@_);
     1;
@@ -90,7 +103,7 @@ sub has_next {
   my $self = shift;
   my $res;
   eval {
-    $res = $self->on_has_next(@_);
+    $res = scalar(@{ $self->_backlog }) > 0 or $self->on_has_next(@_);
     1;
   } or do {
     croak sprintf('Problem calling on_has_next(): %s', $@ // 'zombie error');
@@ -147,6 +160,15 @@ sub continue {
 }
 
 # Private methods
+
+sub _should_retry {
+  my ($self, $item) = @_;
+  return 0
+    unless $item;
+  return 1
+    if $self->retry_strategy eq 'immediate';
+  my $retry_at = $item->{failed_at} + 
+}
 
 sub _yield {
   my $self = shift;
