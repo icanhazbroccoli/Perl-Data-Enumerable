@@ -6,6 +6,7 @@ use warnings;
 use Moose;
 use Moose::Util::TypeConstraints;
 use Carp;
+use Time::HiRes qw(usleep time);
 
 has on_next => (
   is => 'ro',
@@ -33,6 +34,13 @@ has on_fail => (
   isa => enum([qw(retry die ignore)]),
   lazy => 1,
   default => sub { 'die' },
+);
+
+has retry_interval => (
+  is => 'ro',
+  isa => 'Int',
+  lazy => 1,
+  default => sub { 1_000 },
 );
 
 has max_attempts => (
@@ -82,12 +90,12 @@ sub next {
   my $res;
   my $has_next = $self->has_next;
   my $has_backlog = scalar(@{ $self->_backlog }) > 0;
-  return empty
+  return empty()
     unless $has_next or $has_backlog;
   if ($has_backlog) {
     my $retry_item_ix = ($self->backlog_strategy eq 'lifo') ? scalar(@{ $self->_backlog }) - 1 : 0;
     my $retry_item = $self->_backlog->[ $retry_item_ix ];
-    my $ready_to_retry = $self->_should_retry($retry_item);
+    my $retry_delta = $self->_retry_in_delta($retry_item);
     #TODO
   }
   eval {
@@ -161,13 +169,19 @@ sub continue {
 
 # Private methods
 
-sub _should_retry {
+sub _retry_in_delta {
   my ($self, $item) = @_;
   return 0
     unless $item;
   return 1
     if $self->retry_strategy eq 'immediate';
-  my $retry_at = $item->{failed_at} + 
+  my $delta = $self->retry_interval;
+  $delta *= $item->{failed_cnt}
+    if $self->backlog_strategy eq 'linear';
+  $delta *= 2 ** $item->{failed_cnt}
+    if ($self->backlog_strategy eq 'progressive');
+  my $retry_at = $item->{failed_at} + $delta;
+  return int($retry_at - time * 1_000);
 }
 
 sub _yield {
@@ -201,7 +215,7 @@ sub _fail {
   my $key = $failed_item->{key};
   if ($self->on_fail eq 'retry') {
     if ($key) {
-      $failed_item->{last_failed} = time;
+      $failed_item->{last_failed} = int(time * 1_000);
       $failed_item->{failed_cnt}++;
       push @{ $self->_backlog }, $failed_item; 
     } else {
