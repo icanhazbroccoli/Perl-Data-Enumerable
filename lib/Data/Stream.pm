@@ -96,22 +96,45 @@ sub next {
     my $retry_item_ix = ($self->backlog_strategy eq 'lifo') ? scalar(@{ $self->_backlog }) - 1 : 0;
     my $retry_item = $self->_backlog->[ $retry_item_ix ];
     my $retry_delta = $self->_retry_in_delta($retry_item);
-    #TODO
+    if ($retry_delta <= 0) {
+      eval {
+        $res = $self->_retry($retry_item);
+        1;
+      } or do {
+        return $self->_fail($retry_item, $@ // 'zombie error');
+      };
+      $self->_buff($res);
+    }
+  } else {
+    unless ($self->_buff->has_next) {
+      eval {
+        $res = $self->on_next(@_);
+        1;
+      } or do {
+        if ($self->on_fail eq 'ignore') {
+          return $self->next();
+        } elsif ($self->on_fail eq 'retry') {
+          return $self->_fail({
+            failed_cnt => 1,
+            key => shift,
+            args => \@_,
+          }, $@ // 'zombie error');
+        }
+        croak sprintf('Problem calling on_next(): %s', $@ // 'zombie error');
+      };
+      $self->_buff($res);
+    }
   }
-  eval {
-    $res = $self->on_next(@_);
-    1;
-  } or do {
-    croak sprintf('Problem calling on_next(): %s', $@ // 'zombie error');
-  };
-  return $res;
+  return $self->_buff->next;
 }
 
 sub has_next {
   my $self = shift;
   my $res;
   eval {
-    $res = scalar(@{ $self->_backlog }) > 0 or $self->on_has_next(@_);
+    $res =  scalar(@{ $self->_backlog }) > 0  or
+            $self->_buff->has_next            or
+            $self->on_has_next(@_);
     1;
   } or do {
     croak sprintf('Problem calling on_has_next(): %s', $@ // 'zombie error');
@@ -171,15 +194,15 @@ sub continue {
 
 sub _retry_in_delta {
   my ($self, $item) = @_;
-  return 0
-    unless $item;
-  return 1
-    if $self->retry_strategy eq 'immediate';
+
   my $delta = $self->retry_interval;
-  $delta *= $item->{failed_cnt}
-    if $self->backlog_strategy eq 'linear';
-  $delta *= 2 ** $item->{failed_cnt}
-    if ($self->backlog_strategy eq 'progressive');
+  if ($self->backlog_strategy eq 'immediate') {
+    return 0;
+  } elsif ($self->backlog_strategy eq 'linear') {
+    $delta *= $item->{failed_cnt};
+  } elsif ($self->backlog_strategy eq 'progressive') {
+    $delta *= 2 ** $item->{failed_cnt};
+  }
   my $retry_at = $item->{failed_at} + $delta;
   return int($retry_at - time * 1_000);
 }
@@ -187,20 +210,23 @@ sub _retry_in_delta {
 sub _yield {
   my $self = shift;
   my $val = shift;
-  # if (scalar @_) {
-  #   # unresolved
-  #   my $callback = shift;
-  #   eval {
-  #     $val = $callback->($self, $val, @_);
-  #     1;
-  #   } or do {
-  #     my $error = sprintf('Failed to resolve the stream step: %s', $@ // 'zombie error');
-  #     $val = $self->_fail({
-  #       error => $error,
-  #       key => $val,
-  #       extra => [ $callback, );
-  #   }
-  # }
+  if (scalar @_) {
+    # unresolved
+    my $callback = shift;
+    ref($callback) eq 'CODE'
+      or croak 'The 2nd argument of yield should be a callback';
+    eval {
+      $val = $callback->($self, $val, @_);
+      1;
+    } or do {
+      my $error = sprintf('Failed to resolve the stream step: %s', $@ // 'zombie error');
+      return $self->_fail({
+        error => $error,
+        key => $val,
+        args => [ $callback ]
+      });
+    }
+  }
   my $val_is_stream = $val && ref($val) eq 'HASH' && $val->isa('Data::Stream');
   if ($self->_no_wrap || $val_is_stream) {
     return $val;
@@ -210,14 +236,14 @@ sub _yield {
 }
 
 sub _fail {
-  my ($self, $failed_item) = @_;
-  my $error = $failed_item->{error} // 'Undefined error while resolving the stream step';
+  my ($self, $failed_item, $error) = @_;
+  $error //= $failed_item->{error} // 'Undefined error while resolving the stream step';
   my $key = $failed_item->{key};
   if ($self->on_fail eq 'retry') {
     if ($key) {
       $failed_item->{last_failed} = int(time * 1_000);
       $failed_item->{failed_cnt}++;
-      push @{ $self->_backlog }, $failed_item; 
+      push @{ $self->_backlog }, $failed_item;
     } else {
       carp 'Step key is undefined, the operation will not be retried';
     }
