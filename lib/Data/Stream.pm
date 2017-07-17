@@ -7,19 +7,20 @@ use Moose;
 use Moose::Util::TypeConstraints;
 use Carp;
 use Time::HiRes qw(usleep time);
+use Data::Dumper qw(Dumper);
 
 has on_next => (
   is => 'ro',
   isa => 'CodeRef',
   lazy => 1,
-  default => sub { sub { Data::Stream::empty() } },
+  default => sub {  },
 );
 
 has on_has_next => (
   is => 'ro',
   isa => 'CodeRef',
   lazy => 1,
-  default => sub { sub { shift->_buff->has_next() } },
+  default => sub { sub { 0 } },
 );
 
 has is_finite => (
@@ -66,7 +67,7 @@ has retry_strategy => (
 
 has _buff => (
   is => 'ro',
-  isa => 'Data::Stream',
+  isa => 'Undef | Data::Stream',
   lazy => 1,
   default => sub { Data::Stream::empty() },
 );
@@ -103,12 +104,13 @@ sub next {
       } or do {
         return $self->_fail($retry_item, $@ // 'zombie error');
       };
-      $self->_buff($res);
+      $self->_buff($res)
+        unless $self->_no_wrap;
     }
   } else {
-    unless ($self->_buff->has_next) {
+    unless ($self->_buff && $self->_buff->has_next) {
       eval {
-        $res = $self->on_next(@_);
+        $res = $self->on_next->($self, @_);
         1;
       } or do {
         if ($self->on_fail eq 'ignore') {
@@ -122,19 +124,20 @@ sub next {
         }
         croak sprintf('Problem calling on_next(): %s', $@ // 'zombie error');
       };
-      $self->_buff($res);
+      $self->_buff($res)
+        unless $self->_no_wrap;
     }
   }
-  return $self->_buff->next;
+  return $self->_no_wrap ? $res : $self->_buff->next;
 }
 
 sub has_next {
   my $self = shift;
   my $res;
   eval {
-    $res =  scalar(@{ $self->_backlog }) > 0  or
-            $self->_buff->has_next            or
-            $self->on_has_next(@_);
+    $res =  (scalar(@{ $self->_backlog }) > 0)                           ||
+            (!$self->_no_wrap && $self->_buff && $self->_buff->has_next) ||
+            $self->on_has_next->($self, @_);
     1;
   } or do {
     croak sprintf('Problem calling on_has_next(): %s', $@ // 'zombie error');
@@ -257,8 +260,8 @@ sub _fail {
 
 sub empty {
   Data::Stream->new({
-    on_has_next => sub { 0 },
     is_finite   => 1,
+    _no_wrap    => 1,
   });
 }
 
@@ -267,7 +270,7 @@ sub singular {
   my $resolved = 0;
   Data::Stream->new({
     on_has_next => sub { not $resolved },
-    on_next     => sub { $val },
+    on_next     => sub { $resolved = 1; shift->_yield($val) },
     is_finite   => 1,
     _no_wrap    => 1,
   });
@@ -279,7 +282,7 @@ sub from_list {
   my $ix = 0;
   Data::Stream->new({
     on_has_next => sub { $ix < scalar(@list) },
-    on_next     => sub { $list[$ix++] },
+    on_next     => sub { shift->_yield($list[$ix++]) },
     is_finite   => 1,
     _no_wrap    => 1,
   });
