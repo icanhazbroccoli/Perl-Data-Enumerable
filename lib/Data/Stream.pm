@@ -243,7 +243,7 @@ sub yield {
       });
     }
   }
-  my $val_is_stream = $val && ref($val) eq 'HASH' && $val->isa('Data::Stream');
+  my $val_is_stream = $val && ref($val) eq 'Data::Stream' && $val->isa('Data::Stream');
   if ($self->_no_wrap || $val_is_stream) {
     if ($self->_signature eq 'singular') {
       carp sprintf('Returning value: %i', $val);
