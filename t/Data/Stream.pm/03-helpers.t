@@ -19,6 +19,13 @@ use Data::Stream;
 }
 
 {
+  my $stream = Data::Stream->singular(0);
+  is $stream->has_next, 1;
+  is $stream->next, 0;
+  is $stream->has_next, 0;
+}
+
+{
   my $stream = Data::Stream->from_list(1..8);
   is $stream->is_finite, 1;
   is_deeply $stream->to_list, [1..8];

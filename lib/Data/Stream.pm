@@ -90,7 +90,7 @@ has _signature => (
   is => 'ro',
   isa => 'Str | Undef',
   lazy => 1,
-  default => sub {},
+  default => sub { '' },
 );
 
 sub next {
@@ -118,8 +118,9 @@ sub next {
   } else {
     unless ($self->_buff && $self->_buff->has_next) {
       eval {
+        defined $res or carp sprintf('Res is undefined %s %i', $self->_signature, $self->has_next);
         $res = $self->on_next->($self, @_);
-        defined $res or confess 'Res is empty';
+        defined $res or confess sprintf('Res is undefined %s %i', $self->_signature, $self->has_next);
         1;
       } or do {
         if ($self->on_fail eq 'ignore') {
@@ -137,22 +138,24 @@ sub next {
         unless $self->_no_wrap;
     }
   }
-  warn Dumper(["value: ", $res, $self->_buff, $self->_buff->has_next, $self->_buff->next()]);
-  return $self->_no_wrap ? $res : $self->_buff->next;
+  warn Dumper(["value: ", $res, $self->_buff, $self->_buff ? $self->_buff->has_next : -1]);
+  my $return = $self->_no_wrap ? $res : $self->_buff->next;
+  carp Dumper([ "return", $return ]);
+  return $return;
 }
 
 sub has_next {
   my $self = shift;
   my $res;
   eval {
-    $res =  (scalar(@{ $self->_backlog }) > 0)                           ||
-            (!$self->_no_wrap && $self->_buff && $self->_buff->has_next) ||
+    $res =  (scalar(@{ $self->_backlog }) > 0)       ||
+            ($self->_buff && $self->_buff->has_next) ||
             $self->on_has_next->($self, @_);
     1;
   } or do {
     croak sprintf('Problem calling on_has_next(): %s', $@ // 'zombie error');
   };
-  return $res;
+  return int $res;
 }
 
 sub to_list {
@@ -245,10 +248,12 @@ sub yield {
     if ($self->_signature eq 'singular') {
       carp sprintf('Returning value: %i', $val);
     }
+    carp sprintf('Returning a plain value: %i', $val);
     return $val;
   } else {
     defined $val or confess 'should not happen';
-    return Data::Stream::singular($val);
+    carp sprintf('Wrapping a plain value: %s', Dumper($val));
+    return Data::Stream->singular($val);
   }
 }
 
@@ -286,7 +291,7 @@ sub singular {
   carp sprintf('Initialized a new singular: %i', $val);
   Data::Stream->new({
     on_has_next => sub { not $resolved },
-    on_next     => sub { $resolved = 1; $val },
+    on_next     => sub { $resolved = 1; carp(sprintf("!!! return value: %i", $val)); shift->yield($val) },
     is_finite   => 1,
     _no_wrap    => 1,
     _signature  => 'singular',

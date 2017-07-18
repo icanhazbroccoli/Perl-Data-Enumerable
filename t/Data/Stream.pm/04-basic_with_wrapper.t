@@ -16,7 +16,6 @@ use Data::Stream;
     _no_wrap => 0,
     _signature => 'the_stream',
   });
-  diag Data::Dumper::Dumper($stream->to_list);
   is_deeply $stream->to_list, [0..9];
 }
 
