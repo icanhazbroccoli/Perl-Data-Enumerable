@@ -98,6 +98,7 @@ sub next {
   my $res;
   my $has_next = $self->has_next;
   my $has_backlog = scalar(@{ $self->_backlog }) > 0;
+  warn sprintf('has_next: %i, has_backlog: %i, signature: %s', $has_next, $has_backlog, $self->_signature // '');
   return empty()
     unless $has_next or $has_backlog;
   if ($has_backlog) {
@@ -118,6 +119,7 @@ sub next {
     unless ($self->_buff && $self->_buff->has_next) {
       eval {
         $res = $self->on_next->($self, @_);
+        defined $res or confess 'Res is empty';
         1;
       } or do {
         if ($self->on_fail eq 'ignore') {
@@ -135,7 +137,7 @@ sub next {
         unless $self->_no_wrap;
     }
   }
-  warn Dumper(["value: ", $res, $self->_buff]);
+  warn Dumper(["value: ", $res, $self->_buff, $self->_buff->has_next, $self->_buff->next()]);
   return $self->_no_wrap ? $res : $self->_buff->next;
 }
 
@@ -240,8 +242,12 @@ sub yield {
   }
   my $val_is_stream = $val && ref($val) eq 'HASH' && $val->isa('Data::Stream');
   if ($self->_no_wrap || $val_is_stream) {
+    if ($self->_signature eq 'singular') {
+      carp sprintf('Returning value: %i', $val);
+    }
     return $val;
   } else {
+    defined $val or confess 'should not happen';
     return Data::Stream::singular($val);
   }
 }
@@ -277,9 +283,10 @@ sub empty {
 sub singular {
   my ($class, $val) = @_;
   my $resolved = 0;
+  carp sprintf('Initialized a new singular: %i', $val);
   Data::Stream->new({
     on_has_next => sub { not $resolved },
-    on_next     => sub { $resolved = 1; shift->yield($val) },
+    on_next     => sub { $resolved = 1; $val },
     is_finite   => 1,
     _no_wrap    => 1,
     _signature  => 'singular',
