@@ -66,10 +66,10 @@ has retry_strategy => (
 );
 
 has _buff => (
-  is => 'ro',
+  is => 'rw',
   isa => 'Undef | Data::Stream',
   lazy => 1,
-  default => sub { Data::Stream::empty() },
+  default => sub {},
 );
 
 has _backlog => (
@@ -84,6 +84,13 @@ has _no_wrap => (
   isa => 'Bool',
   lazy => 1,
   default => sub { 0 },
+);
+
+has _signature => (
+  is => 'ro',
+  isa => 'Str | Undef',
+  lazy => 1,
+  default => sub {},
 );
 
 sub next {
@@ -128,6 +135,7 @@ sub next {
         unless $self->_no_wrap;
     }
   }
+  warn Dumper(["value: ", $res, $self->_buff]);
   return $self->_no_wrap ? $res : $self->_buff->next;
 }
 
@@ -185,7 +193,7 @@ sub continue {
   Data::Stream->new({
     on_next => sub {
       my ($self, $key) = @_;
-      $self->_yield($key, $on_next);
+      $self->yield($key, $on_next);
     },
     on_has_next => delete $ext->{on_has_next} // $self->on_has_next,
     is_finite   => delete $ext->{is_finite}   // $self->is_finite,
@@ -210,7 +218,7 @@ sub _retry_in_delta {
   return int($retry_at - time * 1_000);
 }
 
-sub _yield {
+sub yield {
   my $self = shift;
   my $val = shift;
   if (scalar @_) {
@@ -234,7 +242,7 @@ sub _yield {
   if ($self->_no_wrap || $val_is_stream) {
     return $val;
   } else {
-    return Data::Stream::singular($_[1]);
+    return Data::Stream::singular($val);
   }
 }
 
@@ -262,6 +270,7 @@ sub empty {
   Data::Stream->new({
     is_finite   => 1,
     _no_wrap    => 1,
+    _signature  => 'empty',
   });
 }
 
@@ -270,9 +279,10 @@ sub singular {
   my $resolved = 0;
   Data::Stream->new({
     on_has_next => sub { not $resolved },
-    on_next     => sub { $resolved = 1; shift->_yield($val) },
+    on_next     => sub { $resolved = 1; shift->yield($val) },
     is_finite   => 1,
     _no_wrap    => 1,
+    _signature  => 'singular',
   });
 }
 
@@ -282,7 +292,7 @@ sub from_list {
   my $ix = 0;
   Data::Stream->new({
     on_has_next => sub { $ix < scalar(@list) },
-    on_next     => sub { shift->_yield($list[$ix++]) },
+    on_next     => sub { shift->yield($list[$ix++]) },
     is_finite   => 1,
     _no_wrap    => 1,
   });
