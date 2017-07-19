@@ -6,8 +6,6 @@ use warnings;
 use Moose;
 use Moose::Util::TypeConstraints;
 use Carp;
-use Time::HiRes qw(usleep time);
-use Data::Dumper qw(Dumper);
 
 has on_next => (
   is => 'ro',
