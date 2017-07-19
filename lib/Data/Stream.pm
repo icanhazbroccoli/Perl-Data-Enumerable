@@ -42,13 +42,6 @@ has _no_wrap => (
   default => sub { 0 },
 );
 
-has _signature => (
-  is => 'ro',
-  isa => 'Str | Undef',
-  lazy => 1,
-  default => sub { '' },
-);
-
 sub next {
   my $self = shift;
   my $res;
@@ -105,7 +98,7 @@ sub take {
   my ($self, $slice_size) = @_;
   my $ix = 0;
   my @acc;
-  push @acc, $self->next while ($self->has_next && $ix < $slice_size);
+  push @acc, $self->next while ($self->has_next && $ix++ < $slice_size);
   return \@acc;
 }
 
@@ -122,7 +115,6 @@ sub continue {
     on_has_next => delete $ext->{on_has_next} // $this->on_has_next,
     is_finite   => delete $ext->{is_finite}   // $this->is_finite,
     _no_wrap    => delete $ext->{is_finite}   // $this->_no_wrap,
-    _signature  => 'continue.' . ($ext->{_signature} // ''),
     %ext,
   });
 }
@@ -147,7 +139,6 @@ sub empty {
   Data::Stream->new({
     is_finite   => 1,
     _no_wrap    => 1,
-    _signature  => 'empty',
   });
 }
 
@@ -159,7 +150,6 @@ sub singular {
     on_next     => sub { $resolved = 1; shift->yield($val) },
     is_finite   => 1,
     _no_wrap    => 1,
-    _signature  => 'singular',
   });
 }
 
