@@ -49,4 +49,26 @@ use Data::Dumper qw(Dumper);
   is_deeply $fib_stream->take(10), [1, 1, 2, 3, 5, 8, 13, 21, 34, 55];
 }
 
+{
+  # Pascal triangle
+
+  my $pascal_stream = Data::Stream->new({
+    on_has_next => sub { 1 },
+    on_next => sub {
+      my ($self) = @_;
+      my $ix = $self->{_pascal_ix_} // 0;
+      my @prev_row = @{ $self->{_pascal_row_} // [] };
+      $self->{_pascal_row_} = [
+        map {
+          $_ == 0 || $_ == ($ix) ? 1 : $prev_row[$_ - 1] + $prev_row[$_]
+        } 0 .. $ix
+      ];
+      $self->{_pascal_ix_}++;
+      $self->yield(sprintf('%i: %s', $ix, join(' ', @{ $self->{_pascal_row_} })));
+    },
+  });
+
+  diag join("\n", @{ $pascal_stream->take(10) });
+}
+
 done_testing;
