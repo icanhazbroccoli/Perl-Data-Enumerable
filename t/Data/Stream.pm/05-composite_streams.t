@@ -26,4 +26,25 @@ use Data::Stream;
   is_deeply $stream->to_list, [map { my $i = $_; map { $_ * $i} 1..10  } 1..10]
 }
 
+{
+  my $i = 0 ;
+
+  my $stream = Data::Stream->new({
+    on_has_next => sub { 1 },
+    on_next => sub {
+      Data::Stream->new({
+        on_has_next => sub { 1 },
+        on_next => sub {
+          Data::Stream->new({
+            on_has_next => sub { $i == 0 },
+            on_next => sub { shift->yield($i++) }
+          })
+        }
+      })
+    },
+  });
+
+  is_deeply $stream->next, 0;
+}
+
 done_testing;

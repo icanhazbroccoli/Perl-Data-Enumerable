@@ -30,53 +30,11 @@ has is_finite => (
   default => sub { 0 },
 );
 
-has on_fail => (
-  is => 'ro',
-  isa => enum([qw(retry die ignore)]),
-  lazy => 1,
-  default => sub { 'die' },
-);
-
-has retry_interval => (
-  is => 'ro',
-  isa => 'Int',
-  lazy => 1,
-  default => sub { 1_000 },
-);
-
-has max_attempts => (
-  is => 'ro',
-  isa => 'Int',
-  lazy => 1,
-  default => sub { 10 },
-);
-
-has backlog_strategy => (
-  is => 'ro',
-  isa => enum([qw(fifo lifo immediate)]),
-  lazy => 1,
-  default => sub { 'fifo' },
-);
-
-has retry_strategy => (
-  is => 'ro',
-  isa => enum([qw(basic linear progressive)]),
-  lazy => 1,
-  default => sub { 'basic' },
-);
-
 has _buff => (
   is => 'rw',
   isa => 'Undef | Data::Stream',
   lazy => 1,
   default => sub {},
-);
-
-has _backlog => (
-  is => 'ro',
-  isa => 'ArrayRef',
-  lazy => 1,
-  default => sub { [] },
 );
 
 has _no_wrap => (
@@ -96,51 +54,12 @@ has _signature => (
 sub next {
   my $self = shift;
   my $res;
-  my $has_next = $self->has_next;
-  my $has_backlog = scalar(@{ $self->_backlog }) > 0;
-  warn sprintf('has_next: %i, has_backlog: %i, signature: %s', $has_next, $has_backlog, $self->_signature // '');
-  return empty()
-    unless $has_next or $has_backlog;
-  if ($has_backlog) {
-    my $retry_item_ix = ($self->backlog_strategy eq 'lifo') ? scalar(@{ $self->_backlog }) - 1 : 0;
-    my $retry_item = $self->_backlog->[ $retry_item_ix ];
-    my $retry_delta = $self->_retry_in_delta($retry_item);
-    if ($retry_delta <= 0) {
-      eval {
-        $res = $self->_retry($retry_item);
-        1;
-      } or do {
-        return $self->_fail($retry_item, $@ // 'zombie error');
-      };
-      $self->_buff($res)
-        unless $self->_no_wrap;
-    }
-  } else {
-    unless ($self->_buff && $self->_buff->has_next) {
-      eval {
-        defined $res or carp sprintf('Res is undefined %s %i', $self->_signature, $self->has_next);
-        $res = $self->on_next->($self, @_);
-        defined $res or confess sprintf('Res is undefined %s %i', $self->_signature, $self->has_next);
-        1;
-      } or do {
-        if ($self->on_fail eq 'ignore') {
-          return $self->next();
-        } elsif ($self->on_fail eq 'retry') {
-          return $self->_fail({
-            failed_cnt => 1,
-            key => shift,
-            args => \@_,
-          }, $@ // 'zombie error');
-        }
-        croak sprintf('Problem calling on_next(): %s', $@ // 'zombie error');
-      };
-      $self->_buff($res)
-        unless $self->_no_wrap;
-    }
+  unless ($self->_buff && $self->_buff->has_next) {
+    $res = $self->on_next->($self, @_);
+    $self->_buff($res)
+      unless $self->_no_wrap;
   }
-  warn Dumper(["value: ", $res, $self->_buff, $self->_buff ? $self->_buff->has_next : -1]);
   my $return = $self->_no_wrap ? $res : $self->_buff->next;
-  carp Dumper([ "return", $return ]);
   return $return;
 }
 
@@ -148,15 +67,17 @@ sub has_next {
   my $self = shift;
   my $res;
   eval {
-    $res =  (scalar(@{ $self->_backlog }) > 0)       ||
-            ($self->_buff && $self->_buff->has_next) ||
-            $self->on_has_next->($self, @_);
+    $res = $self->_has_next_in_buffer()    ||
+           $self->_has_next_in_generator();
     1;
   } or do {
     croak sprintf('Problem calling on_has_next(): %s', $@ // 'zombie error');
   };
   return int $res;
 }
+
+sub _has_next_in_buffer    { my $self = shift; defined($self->_buff) && $self->_buff->has_next }
+sub _has_next_in_generator { my $self = shift; $self->on_has_next->($self, @_) }
 
 sub to_list {
   my ($self) = @_;
@@ -191,88 +112,35 @@ sub take {
 }
 
 sub continue {
-  my ($self, $ext) = @_;
+  my ($this, $ext) = @_;
   my %ext = %$ext;
   my $on_next = delete $ext{on_next}
     or croak '`on_next` should be defined on stream continuation';
   Data::Stream->new({
     on_next => sub {
-      my ($self, $key) = @_;
-      $self->yield($key, $on_next);
+      my $self = shift;
+      $self->yield($on_next->($self, $this->next));
     },
-    on_has_next => delete $ext->{on_has_next} // $self->on_has_next,
-    is_finite   => delete $ext->{is_finite}   // $self->is_finite,
-    _no_wrap    => delete $ext->{is_finite}   // $self->_no_wrap,
+    on_has_next => delete $ext->{on_has_next} // $this->on_has_next,
+    is_finite   => delete $ext->{is_finite}   // $this->is_finite,
+    _no_wrap    => delete $ext->{is_finite}   // $this->_no_wrap,
+    _signature  => 'continue.' . ($ext->{_signature} // ''),
+    %ext,
   });
 }
 
 # Private methods
 
-sub _retry_in_delta {
-  my ($self, $item) = @_;
-
-  my $delta = $self->retry_interval;
-  if ($self->backlog_strategy eq 'immediate') {
-    return 0;
-  } elsif ($self->backlog_strategy eq 'linear') {
-    $delta *= $item->{failed_cnt};
-  } elsif ($self->backlog_strategy eq 'progressive') {
-    $delta *= 2 ** $item->{failed_cnt};
-  }
-  my $retry_at = $item->{failed_at} + $delta;
-  return int($retry_at - time * 1_000);
-}
-
 sub yield {
   my $self = shift;
   my $val = shift;
-  if (scalar @_) {
-    # unresolved
-    my $callback = shift;
-    ref($callback) eq 'CODE'
-      or croak 'The 2nd argument of yield should be a callback';
-    eval {
-      $val = $callback->($self, $val, @_);
-      1;
-    } or do {
-      my $error = sprintf('Failed to resolve the stream step: %s', $@ // 'zombie error');
-      return $self->_fail({
-        error => $error,
-        key => $val,
-        args => [ $callback ]
-      });
-    }
-  }
   my $val_is_stream = $val && ref($val) eq 'Data::Stream' && $val->isa('Data::Stream');
   if ($self->_no_wrap || $val_is_stream) {
-    if ($self->_signature eq 'singular') {
-      carp sprintf('Returning value: %i', $val);
-    }
-    carp sprintf('Returning a plain value: %i', $val);
     return $val;
   } else {
     defined $val or confess 'should not happen';
-    carp sprintf('Wrapping a plain value: %s', Dumper($val));
     return Data::Stream->singular($val);
   }
-}
-
-sub _fail {
-  my ($self, $failed_item, $error) = @_;
-  $error //= $failed_item->{error} // 'Undefined error while resolving the stream step';
-  my $key = $failed_item->{key};
-  if ($self->on_fail eq 'retry') {
-    if ($key) {
-      $failed_item->{last_failed} = int(time * 1_000);
-      $failed_item->{failed_cnt}++;
-      push @{ $self->_backlog }, $failed_item;
-    } else {
-      carp 'Step key is undefined, the operation will not be retried';
-    }
-  } elsif ($self->on_fail eq 'die') {
-    croak $error;
-  }
-  $self->next();
 }
 
 # Class methods
@@ -288,10 +156,9 @@ sub empty {
 sub singular {
   my ($class, $val) = @_;
   my $resolved = 0;
-  carp sprintf('Initialized a new singular: %i', $val);
   Data::Stream->new({
     on_has_next => sub { not $resolved },
-    on_next     => sub { $resolved = 1; carp(sprintf("!!! return value: %i", $val)); shift->yield($val) },
+    on_next     => sub { $resolved = 1; shift->yield($val) },
     is_finite   => 1,
     _no_wrap    => 1,
     _signature  => 'singular',
