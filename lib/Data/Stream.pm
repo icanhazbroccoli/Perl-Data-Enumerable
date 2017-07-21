@@ -89,6 +89,42 @@ sub map {
   });
 }
 
+use Data::Dumper qw(Dumper);
+sub grep {
+  my ($self, $callback, $max_lookahead) = @_;
+  my $next;
+  my $initialized = 0;
+  $max_lookahead //= 0;
+  Data::Stream->new({
+    on_has_next => sub {
+      my $ix = 0;
+      $initialized = 1;
+      undef $next;
+      while ($self->has_next) {
+        if ($max_lookahead > 0) {
+          $ix > $max_lookahead
+            and do {
+              carp sprintf 'Max lookahead steps cnt reached. Bailing out';
+              return 0;
+            };
+        }
+        $next = $self->next;
+        $callback->($next) and last;
+        undef $next;
+        $ix++;
+      }
+      return defined $next;
+    },
+    on_next => sub {
+      my $self = shift;
+      $initialized or $self->has_next;
+      $self->yield($next);
+    },
+    is_finite => $self->is_finite,
+    _no_wrap => $self->_no_wrap,
+  });
+}
+
 sub resolve {
   my ($self) = @_;
   $self->next() while $self->has_next;
