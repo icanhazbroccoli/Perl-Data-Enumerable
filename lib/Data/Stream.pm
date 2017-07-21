@@ -163,7 +163,6 @@ sub yield {
   if ($self->_no_wrap || $val_is_stream) {
     return $val;
   } else {
-    defined $val or confess 'should not happen';
     return Data::Stream->singular($val);
   }
 }
@@ -196,6 +195,16 @@ sub from_list {
     on_has_next => sub { $ix < scalar(@list) },
     on_next     => sub { shift->yield($list[$ix++]) },
     is_finite   => 1,
+    _no_wrap    => 1,
+  });
+}
+
+sub infinity {
+  my $class = shift;
+  Data::Stream->new({
+    on_has_next => sub { 1 },
+    on_next     => sub {},
+    _is_finite  => 0,
     _no_wrap    => 1,
   });
 }
