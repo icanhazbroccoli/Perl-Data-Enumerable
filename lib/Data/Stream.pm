@@ -89,7 +89,6 @@ sub map {
   });
 }
 
-use Data::Dumper qw(Dumper);
 sub grep {
   my ($self, $callback, $max_lookahead) = @_;
   my $next;
