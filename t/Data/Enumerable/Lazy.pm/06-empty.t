@@ -5,10 +5,10 @@ use warnings;
 
 use Test::More;
 
-use Data::Enumerable;
+use Data::Enumerable::Lazy;
 
 {
-  my $enum = Data::Enumerable->empty();
+  my $enum = Data::Enumerable::Lazy->empty();
   is_deeply $enum->to_list, [], 'An empty enum resolves in an empty list';
 }
 

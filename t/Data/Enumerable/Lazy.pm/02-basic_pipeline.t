@@ -4,12 +4,12 @@ use warnings;
 
 use Test::More;
 
-use Data::Enumerable;
+use Data::Enumerable::Lazy;
 use Data::Dumper qw(Dumper);
 
 {
   my $i = 0;
-  my $stream = Data::Enumerable->new({
+  my $stream = Data::Enumerable::Lazy->new({
     on_has_next => sub { $i < 10 },
     on_next => sub { shift->yield($i++) },
     is_finite => 1,
