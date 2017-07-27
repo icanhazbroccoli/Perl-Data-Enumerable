@@ -5,17 +5,17 @@ use warnings;
 
 use Test::More;
 
-use Data::Stream;
+use Data::Enumerable;
 
 {
   my $i = 0;
 
-  my $stream = Data::Stream->new({
+  my $stream = Data::Enumerable->new({
     on_has_next => sub { $i < 10 },
     on_next => sub {
       my $j = 1;
       $i++;
-      shift->yield(Data::Stream->new({
+      shift->yield(Data::Enumerable->new({
         on_has_next => sub { $j <= 10 },
         on_next => sub { shift->yield($i * ($j++)) },
       }))
@@ -29,13 +29,13 @@ use Data::Stream;
 {
   my $i = 0 ;
 
-  my $stream = Data::Stream->new({
+  my $stream = Data::Enumerable->new({
     on_has_next => sub { 1 },
     on_next => sub {
-      Data::Stream->new({
+      Data::Enumerable->new({
         on_has_next => sub { 1 },
         on_next => sub {
-          Data::Stream->new({
+          Data::Enumerable->new({
             on_has_next => sub { $i == 0 },
             on_next => sub { shift->yield($i++) }
           })

@@ -5,7 +5,7 @@ use warnings;
 
 use Test::More;
 
-use Data::Stream;
+use Data::Enumerable;
 
 my @tests = (
   {
@@ -31,7 +31,7 @@ my @tests = (
 {
   foreach my $test (@tests) {
     my ($given, $grep_sub, $expected, $descr) = @$test{qw(given grep_sub expected descr)};
-    my $stream = Data::Stream->from_list(@{ $given })->grep($grep_sub);
+    my $stream = Data::Enumerable->from_list(@{ $given })->grep($grep_sub);
 
     is_deeply $stream->to_list, $expected, $descr;
   }

@@ -5,10 +5,10 @@ use warnings;
 
 use Test::More;
 
-use Data::Stream;
+use Data::Enumerable;
 
 {
-  my $stream = Data::Stream->from_list(0..9)->continue({
+  my $stream = Data::Enumerable->from_list(0..9)->continue({
     on_next => sub {
       my ($self, $i) = @_;
       $self->yield($i * $i);

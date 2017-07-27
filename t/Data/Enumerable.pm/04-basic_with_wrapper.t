@@ -5,11 +5,11 @@ use warnings;
 
 use Test::More;
 
-use Data::Stream;
+use Data::Enumerable;
 
 {
   my $ix = 0;
-  my $stream = Data::Stream->new({
+  my $stream = Data::Enumerable->new({
     on_has_next => sub { $ix < 10 },
     on_next => sub { shift->yield($ix++) },
     is_finite => 1,

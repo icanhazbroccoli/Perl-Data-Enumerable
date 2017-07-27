@@ -6,14 +6,14 @@ use warnings;
 use Test::More;
 use POSIX qw(floor);
 
-use Data::Stream;
+use Data::Enumerable;
 use Data::Dumper qw(Dumper);
 
 {
 
   # Prime number generator
 
-  my $prime_num_stream = Data::Stream->new({
+  my $prime_num_stream = Data::Enumerable->new({
     on_has_next => sub { 1 },
     on_next => sub {
       my $self = shift;
@@ -37,7 +37,7 @@ use Data::Dumper qw(Dumper);
 {
   # Fibonacci numbers
 
-  my $fib_stream = Data::Stream->new({
+  my $fib_stream = Data::Enumerable->new({
     on_has_next => sub { 1 },
     on_next => sub {
       my ($self) = @_;
@@ -52,7 +52,7 @@ use Data::Dumper qw(Dumper);
 {
   # Pascal triangle
 
-  my $pascal_stream = Data::Stream->new({
+  my $pascal_stream = Data::Enumerable->new({
     on_has_next => sub { 1 },
     on_next => sub {
       my ($self) = @_;

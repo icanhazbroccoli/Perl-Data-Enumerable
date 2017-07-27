@@ -1,4 +1,4 @@
-package Data::Stream;
+package Data::Enumerable;
 
 use strict;
 use warnings;
@@ -30,7 +30,7 @@ has is_finite => (
 
 has _buff => (
   is => 'rw',
-  isa => 'Undef | Data::Stream',
+  isa => 'Undef | Data::Enumerable',
   lazy => 1,
   default => sub {},
 );
@@ -81,7 +81,7 @@ sub to_list {
 
 sub map {
   my ($self, $callback) = @_;
-  Data::Stream->new({
+  Data::Enumerable->new({
     on_has_next => $self->on_has_next,
     on_next     => sub { shift; $callback->($self, @_) },
     is_finite   => $self->is_finite,
@@ -94,7 +94,7 @@ sub grep {
   my $next;
   my $initialized = 0;
   $max_lookahead //= 0;
-  Data::Stream->new({
+  Data::Enumerable->new({
     on_has_next => sub {
       my $ix = 0;
       $initialized = 1;
@@ -142,7 +142,7 @@ sub continue {
   my %ext = %$ext;
   my $on_next = delete $ext{on_next}
     or croak '`on_next` should be defined on stream continuation';
-  Data::Stream->new({
+  Data::Enumerable->new({
     on_next => sub {
       my $self = shift;
       $self->yield($on_next->($self, $this->next));
@@ -159,18 +159,18 @@ sub continue {
 sub yield {
   my $self = shift;
   my $val = shift;
-  my $val_is_stream = $val && ref($val) eq 'Data::Stream' && $val->isa('Data::Stream');
+  my $val_is_stream = $val && ref($val) eq 'Data::Enumerable' && $val->isa('Data::Enumerable');
   if ($self->_no_wrap || $val_is_stream) {
     return $val;
   } else {
-    return Data::Stream->singular($val);
+    return Data::Enumerable->singular($val);
   }
 }
 
 # Class methods
 
 sub empty {
-  Data::Stream->new({
+  Data::Enumerable->new({
     is_finite   => 1,
     _no_wrap    => 1,
   });
@@ -179,7 +179,7 @@ sub empty {
 sub singular {
   my ($class, $val) = @_;
   my $resolved = 0;
-  Data::Stream->new({
+  Data::Enumerable->new({
     on_has_next => sub { not $resolved },
     on_next     => sub { $resolved = 1; shift->yield($val) },
     is_finite   => 1,
@@ -191,7 +191,7 @@ sub from_list {
   my $class = shift;
   my @list = @_;
   my $ix = 0;
-  Data::Stream->new({
+  Data::Enumerable->new({
     on_has_next => sub { $ix < scalar(@list) },
     on_next     => sub { shift->yield($list[$ix++]) },
     is_finite   => 1,
@@ -201,7 +201,7 @@ sub from_list {
 
 sub infinity {
   my $class = shift;
-  Data::Stream->new({
+  Data::Enumerable->new({
     on_has_next => sub { 1 },
     on_next     => sub {},
     _is_finite  => 0,
