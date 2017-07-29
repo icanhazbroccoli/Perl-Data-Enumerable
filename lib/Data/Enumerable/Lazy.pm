@@ -42,7 +42,7 @@ has _no_wrap => (
   default => sub { 0 },
 );
 
-=item next/0
+=item next()
 
 Function next() is the primary interface for accessing elements of an
 enumerable. It will do some internal checks and if there is no elements to be
@@ -130,10 +130,10 @@ sub to_list {
   return \@acc;
 }
 
-=item map()
+=item map($callback)
 
 Creates a new enumerable by applying a user-defined function to the original
-enumerable.
+enumerable. Works the same way as perl map {} function but it's lazy.
 
 =cut
 
@@ -147,7 +147,25 @@ sub map {
   });
 }
 
-=item grep()
+=item reduce($acc, $callback)
+
+Resolves the enumerable and returns the resulting state of the accumulator $acc
+provided as the 1st argument. $callback should always return the new state of
+$acc.
+
+reduce() is defined for finite enumerables only.
+
+=cut
+
+sub reduce {
+  my ($self, $acc, $callback) = @_;
+  croak 'Only finite enumerables might be reduced. Use is_finite=1'
+    unless $self->is_finite;
+  ($acc = $callback->($self, $acc, $self->next)) while $self->has_next;
+  return $acc;
+}
+
+=item grep($callback, $max_lookahead)
 
 grep() is a function which returns a new enumerable by applying a user-defined
 filter function.
@@ -173,8 +191,11 @@ sub grep {
   $max_lookahead //= 0;
   $max_lookahead = 0
     if $self->is_finite;
+  my $prev_has_next;
   Data::Enumerable::Lazy->new({
     on_has_next => sub {
+      defined $prev_has_next
+        and return $prev_has_next;
       my $ix = 0;
       $initialized = 1;
       undef $next;
@@ -183,7 +204,7 @@ sub grep {
           $ix > $max_lookahead
             and do {
               carp sprintf 'Max lookahead steps cnt reached. Bailing out';
-              return 0;
+              return $prev_has_next = 0;
             };
         }
         $next = $self->next;
@@ -191,11 +212,12 @@ sub grep {
         undef $next;
         $ix++;
       }
-      return defined $next;
+      return $prev_has_next = (defined $next);
     },
     on_next => sub {
       my $self = shift;
       $initialized or $self->has_next;
+      undef $prev_has_next;
       $self->yield($next);
     },
     is_finite => $self->is_finite,
@@ -217,9 +239,9 @@ sub resolve {
   $self->next() while $self->has_next;
 }
 
-=item take()
+=item take($N_elements)
 
-Resolves first N elements and returns the resulting list. If there are
+Resolves first $N_elements and returns the resulting list. If there are
 fewer than N elements in the enumerable, the entire enumerable would be
 returned as a list.
 
@@ -233,28 +255,49 @@ sub take {
   return \@acc;
 }
 
+=item take_while($callback, $max_lookahead)
+
+Iterates over an enumerable until $callback returns false or $max_lookahead
+number of lookahead steps has been made.
+
+$callback takes 2 arguments: $self and a candidate element. This is a lookahead
+method so the heavylifting job would be done during on_next() method call
+whereas next() simply returns a pre-cached value.
+
+$max_lookahead is an integer, defaults to 0 meaning no limit.
+
+=cut
+
 sub take_while {
   my ($self, $callback, $max_lookahead) = @_;
   $max_lookahead //= 0;
   my $next_el;
+  my $prev_has_next;
+  my $initialized = 0;
   Data::Enumerable::Lazy->new({
     on_has_next => sub {
+      $initialized = 1;
+      defined $prev_has_next
+        and return $prev_has_next;
       my $lookahead = 0;
-      my $has_next = 0;
       while ($self->has_next) {
         $next_el = $self->next;
         $lookahead++;
-        return 0 if $max_lookahead > 0 && $lookahead > $max_lookahead;
-        return 1 if $callback->($self, $next_el);
+        return $prev_has_next = 0 if $max_lookahead > 0 && $lookahead > $max_lookahead;
+        return $prev_has_next = 1 if $callback->($self, $next_el);
       }
-      return 0;
+      return $prev_has_next = 0;
     },
-    on_next => sub { shift->yield($next_el) },
+    on_next => sub {
+      $initialized or $self->has_next();
+      undef $prev_has_next;
+      shift->yield($next_el);
+    },
     is_finite => $self->is_finite,
   });
 }
 
-=item continue()
+=item continue($ext = %{ on_next => sub {}, ... })
 
 Creates a new enumerable by extending the existing one. on_next is
 the only manfatory argument. on_has_next might be overriden if some
@@ -298,12 +341,27 @@ sub yield {
 
 # Class methods
 
+=item empty()
+
+Returns an empty enumerable. Effectively it means an equivalent of an empty
+array. has_next() will return false and next() will return undef. Useful
+whenever a on_next() step wants to return an empty resultset.
+
+=cut
+
 sub empty {
   Data::Enumerable::Lazy->new({
     is_finite   => 1,
     _no_wrap    => 1,
   });
 }
+
+=item singular($val)
+
+Returns an enumerable with a single element $val. Actively used as an internal
+data container.
+
+=cut
 
 sub singular {
   my ($class, $val) = @_;
@@ -315,6 +373,14 @@ sub singular {
     _no_wrap    => 1,
   });
 }
+
+=item from_list(@list)
+
+Returns a new enumerable instantiated from a list. The easiest way to
+initialize an enumerable. In fact, all elements are already resolved
+so this method sets is_finite=1 by default.
+
+=cut
 
 sub from_list {
   my $class = shift;
@@ -328,6 +394,14 @@ sub from_list {
   });
 }
 
+=item infinity()
+
+Returns a new infinite enumerable. has_next() always returns true whereas
+next() returns undef all the time. Useful as an extension basis for infinite
+sequences.
+
+=cut
+
 sub infinity {
   my $class = shift;
   Data::Enumerable::Lazy->new({
@@ -337,5 +411,11 @@ sub infinity {
     _no_wrap    => 1,
   });
 }
+
+__END__
+
+=head1 Data::Enumerable::Lazy
+
+#TODO
 
 1;
