@@ -233,11 +233,35 @@ sub take {
   return \@acc;
 }
 
+sub take_while {
+  my ($self, $callback, $max_lookahead) = @_;
+  $max_lookahead //= 0;
+  my $next_el;
+  Data::Enumerable::Lazy->new({
+    on_has_next => sub {
+      my $lookahead = 0;
+      my $has_next = 0;
+      while ($self->has_next) {
+        $next_el = $self->next;
+        $lookahead++;
+        return 0 if $max_lookahead > 0 && $lookahead > $max_lookahead;
+        return 1 if $callback->($self, $next_el);
+      }
+      return 0;
+    },
+    on_next => sub { shift->yield($next_el) },
+    is_finite => $self->is_finite,
+  });
+}
+
 =item continue()
 
-Creates a new enumerable by extending the existing one. on_next() is
-the only manfatory argument. on_has_next() might be overriden if some
+Creates a new enumerable by extending the existing one. on_next is
+the only manfatory argument. on_has_next might be overriden if some
 custom logic comes into play.
+
+is_finite is inherited from the parent enumerable by default. All additional
+attributes would be transparently passed to the constuctor.
 
 =cut
 
@@ -253,7 +277,7 @@ sub continue {
     },
     on_has_next => delete $ext->{on_has_next} // $this->on_has_next,
     is_finite   => delete $ext->{is_finite}   // $this->is_finite,
-    _no_wrap    => delete $ext->{is_finite}   // $this->_no_wrap,
+    _no_wrap    => delete $ext->{_no_wrap}    // $this->_no_wrap,
     %ext,
   });
 }
