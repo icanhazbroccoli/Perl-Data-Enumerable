@@ -5,7 +5,6 @@ use warnings;
 use Test::More;
 
 use Data::Enumerable::Lazy;
-use Data::Dumper qw(Dumper);
 
 {
   my $i = 0;

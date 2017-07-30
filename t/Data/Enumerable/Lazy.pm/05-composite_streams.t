@@ -27,6 +27,20 @@ use Data::Enumerable::Lazy;
 }
 
 {
+  my $mult_table = Data::Enumerable::Lazy->from_list(1..10)->continue({
+    on_next => sub {
+      my ($self, $i) = @_;
+      $self->yield(Data::Enumerable::Lazy->from_list(1..10)->continue({
+        on_next => sub {
+          $_[0]->yield( $_[1] * $i )
+        }, 
+      }));
+    },
+  });
+  is_deeply $mult_table->to_list, [map { my $i = $_; map { $_ * $i} 1..10  } 1..10]
+}
+
+{
   my $i = 0 ;
 
   my $stream = Data::Enumerable::Lazy->new({
