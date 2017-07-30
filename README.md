@@ -1,6 +1,6 @@
-#Data::Enumerable::Lazy
+# Data::Enumerable::Lazy
 
-##About
+## About
 
 This package is a lazy enumerable implementation for Perl5. Also known as:
 (sequence) generator, stream. This library is handy for an infinitive
@@ -29,9 +29,9 @@ one.
 A buffer is also an enumerable. This feature allows one to nest enumerables
 as many times as needed.
 
-##Examples
+## Examples
 
-####A basic range
+#### A basic range
 
 This example implements a range generator from $from until $to. In order to
 generate this range we define 2 callbacks: `on_has_next()` and `on_next()`.
@@ -78,7 +78,7 @@ Usage:
   is $range->next, undef, 'A fully iterated sequence returns undef on next()'
 ```
 
-####Prime numbers
+#### Prime numbers
 
 Prime numbers is an infinite sequence of natural numbers. This example
 implements a very basic prime number generator.
@@ -164,7 +164,7 @@ Let's iterate the sequence step by step and see what happens inside.
                          # more to iterate over.
 ```
 
-####DBI paginator example
+#### DBI paginator example
 
 As mentioned earlier, lazy enumerables are useful when the number of the
 elements in the sequence is not known in advance. So far, we were looking at
@@ -215,7 +215,7 @@ size and might work on a rapidly growing dataset.
 In order to reduce the number of queries, we query the data in batches by 10
 elements max.
 
-####Redis queue consumer
+#### Redis queue consumer
 
 ```perl
   use Redis;
@@ -238,7 +238,7 @@ In this example the client is blocked until there is an element available in
 the queue, but it's hidden away from the clients who consume the data item by
 item.
 
-####Kafka example
+#### Kafka example
 
 Kafka consumer wrapper is another example of a lazy calculation application.
 Lazy enumerables are very naturally co-operated with streaming data, like
@@ -283,6 +283,6 @@ grep out corrupted ones and proceed with the mesages.
   }
 ```
 
-##Author
+## Author
 
 Oleg S <me@whitebox.io>
