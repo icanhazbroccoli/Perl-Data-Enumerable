@@ -35,7 +35,7 @@ one.
 A buffer is also an enumerable. This feature allows one to nest enumerables
 as many times as needed.
 
-=head2 Examples
+=head1 Examples
 
 =head4 A basic range
 
@@ -314,9 +314,9 @@ has _no_wrap => (
   default => sub { 0 },
 );
 
-=over
+=head1 Instance methods
 
-=head4 next()
+=head2 next()
 
 Function next() is the primary interface for accessing elements of an
 enumerable. It will do some internal checks and if there is no elements to be
@@ -348,7 +348,7 @@ sub next {
   return $return;
 }
 
-=head4 has_next()
+=head2 has_next()
 
 has_next() is the primary entry point to get an information about the state of
 an enumetable. If the method returned false, there are no more elements to be
@@ -387,7 +387,7 @@ sub _has_next_in_generator {
   $self->on_has_next->($self, @_);
 }
 
-=head4 to_list()
+=head2 to_list()
 
 This function transforms a lazy enumerable to a list. Only finite enumerables
 can be transformed to a list, so the method checks if an enumetable is created
@@ -404,7 +404,7 @@ sub to_list {
   return \@acc;
 }
 
-=head4 map($callback)
+=head2 map($callback)
 
 Creates a new enumerable by applying a user-defined function to the original
 enumerable. Works the same way as perl map {} function but it's lazy.
@@ -421,7 +421,7 @@ sub map {
   });
 }
 
-=head4 reduce($acc, $callback)
+=head2 reduce($acc, $callback)
 
 Resolves the enumerable and returns the resulting state of the accumulator $acc
 provided as the 1st argument. $callback should always return the new state of
@@ -439,7 +439,7 @@ sub reduce {
   return $acc;
 }
 
-=head4 grep($callback, $max_lookahead)
+=head2 grep($callback, $max_lookahead)
 
 grep() is a function which returns a new enumerable by applying a user-defined
 filter function.
@@ -499,7 +499,7 @@ sub grep {
   });
 }
 
-=head4 resolve()
+=head2 resolve()
 
 Resolves an enumerable completely. Applicable for finite enumerables only.
 The method returns nothing.
@@ -513,7 +513,7 @@ sub resolve {
   $self->next() while $self->has_next;
 }
 
-=head4 take($N_elements)
+=head2 take($N_elements)
 
 Resolves first $N_elements and returns the resulting list. If there are
 fewer than N elements in the enumerable, the entire enumerable would be
@@ -529,7 +529,7 @@ sub take {
   return \@acc;
 }
 
-=head4 take_while($callback, $max_lookahead)
+=head2 take_while($callback, $max_lookahead)
 
 Iterates over an enumerable until $callback returns false or $max_lookahead
 number of lookahead steps has been made.
@@ -571,7 +571,7 @@ sub take_while {
   });
 }
 
-=head4 continue($ext = %{ on_next => sub {}, ... })
+=head2 continue($ext = %{ on_next => sub {}, ... })
 
 Creates a new enumerable by extending the existing one. on_next is
 the only manfatory argument. on_has_next might be overriden if some
@@ -599,7 +599,7 @@ sub continue {
   });
 }
 
-=head4 yield($result)
+=head2 yield($result)
 
 This method is supposed to be called from C<on_next> callback only. This is
 the only valid result for an Enumerable to return the next step result.
@@ -622,7 +622,7 @@ sub yield {
 
 =head1 Class methods
 
-=head4 empty()
+=head2 empty()
 
 Returns an empty enumerable. Effectively it means an equivalent of an empty
 array. has_next() will return false and next() will return undef. Useful
@@ -637,7 +637,7 @@ sub empty {
   });
 }
 
-=head4 singular($val)
+=head2 singular($val)
 
 Returns an enumerable with a single element $val. Actively used as an internal
 data container.
@@ -655,7 +655,7 @@ sub singular {
   });
 }
 
-=head4 from_list(@list)
+=head2 from_list(@list)
 
 Returns a new enumerable instantiated from a list. The easiest way to
 initialize an enumerable. In fact, all elements are already resolved
@@ -675,7 +675,7 @@ sub from_list {
   });
 }
 
-=head4 infinity()
+=head2 infinity()
 
 Returns a new infinite enumerable. has_next() always returns true whereas
 next() returns undef all the time. Useful as an extension basis for infinite
