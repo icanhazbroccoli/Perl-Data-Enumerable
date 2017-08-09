@@ -68,7 +68,7 @@ use Data::Dumper qw(Dumper);
     },
   });
 
-  diag join("\n", @{ $pascal_stream->take(10) });
+#diag join("\n", @{ $pascal_stream->take(10) });
 }
 
 done_testing;
