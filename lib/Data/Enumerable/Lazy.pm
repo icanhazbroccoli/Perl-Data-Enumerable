@@ -40,8 +40,8 @@ as many times as needed.
 =head4 A basic range
 
 This example implements a range generator from $from until $to. In order to
-generate this range we define 2 callbacks: on_has_next() and on_next(). The
-first one is used as point of truth whether the sequence has any more
+generate this range we define 2 callbacks: C<on_has_next()> and C<on_next()>.
+The first one is used as point of truth whether the sequence has any more
 non-iterated elements, and the 2nd one is here to return the next element in
 the sequence and the one that changes the state of the internal sequence
 iterator.
@@ -108,16 +108,16 @@ implements a very basic prime number generator.
   });
 
 What's remarkable regarding this specific example is that one can not simply
-call to_list() in order to get all elements of the sequence. The enumerable
+call C<to_list()> in order to get all elements of the sequence. The enumerable
 will throw an exception claiming it's an infinitive sequence. Therefore, we
-should use next() in order to get elements one by one or use another handy
-method take() which returns first N results.
+should use C<next()> in order to get elements one by one or use another handy
+method C<take()> which returns first N results.
 
 =head4 Nested enumerables
 
 In this example we will output a numbers of a multiplication table 10x10.
 What's interesting in this example is that there are 2 sequences: primary and
-secondary. Primary on_next() returns secondary sequence, which generates the
+secondary. Primary C<on_next()> returns secondary sequence, which generates the
 result of multiplication of 2 numbers.
 
   # A new stream based on a range from 1 to 10
@@ -318,21 +318,22 @@ has _no_wrap => (
 
 =head2 next()
 
-Function next() is the primary interface for accessing elements of an
+Function C<next()> is the primary interface for accessing elements of an
 enumerable. It will do some internal checks and if there is no elements to be
 served from an intermediate buffer, it will resolve the next step by calling
-on_next() callback.
+C<on_next()> callback.
 Enumerables are composable: one enumerable might be based on another
 enumeration. E.g.: a sequence of natural number squares is based on the
 sequence of natural numbers themselves. In other words, a sequence is defined
 as a tuple of another sequence and a function which would be lazily applied to
 every element of this sequence.
 
-next() accepts 0 or more arguments, which would be passed to on_next() callback.
+C<next()> accepts 0 or more arguments, which would be passed to C<on_next()>
+callback.
 
-next() is expected to do the heavy-lifting job in opposite to has_next(), which
-is supposed to be cheap and fast. This statement flips upside down whenever
-grep() is applied to a stream. See grep() for more details.
+C<next()> is expected to do the heavy-lifting job in opposite to C<has_next()>,
+which is supposed to be cheap and fast. This statement flips upside down
+whenever C<grep()> is applied to a stream. See C<grep()> for more details.
 
 =cut
 
@@ -350,17 +351,17 @@ sub next {
 
 =head2 has_next()
 
-has_next() is the primary entry point to get an information about the state of
-an enumetable. If the method returned false, there are no more elements to be
-consumed. I.e. the sequence has been iterated completely. Normally it means 
+C<has_next()> is the primary entry point to get an information about the state
+of an enumetable. If the method returned false, there are no more elements to be
+consumed. I.e. the sequence has been iterated completely. Normally it means
 the end of an iteration cycle.
 
-Enumerables use internal buffers in order to support batched on_next()
-resolutions. If there are some elements left in the buffer, on_next()
-won't call on_has_next() callback immediately. If the buffer has been
-iterated completely, on_has_next() would be called.
+Enumerables use internal buffers in order to support batched C<on_next()>
+resolutions. If there are some elements left in the buffer, C<on_next()>
+won't call C<on_has_next()> callback immediately. If the buffer has been
+iterated completely, C<on_has_next()> would be called.
 
-on_next() should be fast on resolving the state of an enumerable as it's going
+C<on_next()> should be fast on resolving the state of an enumerable as it's going
 to be used for a condition state check.
 
 =cut
@@ -391,7 +392,7 @@ sub _has_next_in_generator {
 
 This function transforms a lazy enumerable to a list. Only finite enumerables
 can be transformed to a list, so the method checks if an enumetable is created
-with is_finite=1 flag. An exception would be thrown otherwise.
+with C<is_finite=1> flag. An exception would be thrown otherwise.
 
 =cut
 
@@ -424,10 +425,10 @@ sub map {
 =head2 reduce($acc, $callback)
 
 Resolves the enumerable and returns the resulting state of the accumulator $acc
-provided as the 1st argument. $callback should always return the new state of
-$acc.
+provided as the 1st argument. C<$callback> should always return the new state of
+C<$acc>.
 
-reduce() is defined for finite enumerables only.
+C<reduce()> is defined for finite enumerables only.
 
 =cut
 
@@ -441,20 +442,20 @@ sub reduce {
 
 =head2 grep($callback, $max_lookahead)
 
-grep() is a function which returns a new enumerable by applying a user-defined
-filter function.
+C<grep()> is a function which returns a new enumerable by applying a
+user-defined filter function.
 
-grep() might be applied to both finite and infinite enumerables. In case of an
-infinitive enumerable there is an additional argument specifying max number of
-lookahead steps. If an element satisfying the condition could not be found in
-max_lookahead steps, an enumerable is considered to be completely iterated and
-has_next() will return false.
+C<grep()> might be applied to both finite and infinite enumerables. In case of
+an infinitive enumerable there is an additional argument specifying max number
+of lookahead steps. If an element satisfying the condition could not be found in
+C<max_lookahead> steps, an enumerable is considered to be completely iterated
+and C<has_next()> will return false.
 
-grep() returns a new enumerable with quite special properties: has_next()
-will perform a look ahead and call the original enumerable next() method
+C<grep()> returns a new enumerable with quite special properties: C<has_next()>
+will perform a look ahead and call the original enumerable C<next()> method
 in order to find an element for which the user-defined function will return
-true. next(), on the other side, returns the value that was pre-fetched
-by has_next().
+true. C<next()>, on the other side, returns the value that was pre-fetched
+by C<has_next()>.
 
 =cut
 
@@ -535,10 +536,10 @@ Iterates over an enumerable until $callback returns false or $max_lookahead
 number of lookahead steps has been made.
 
 $callback takes 2 arguments: $self and a candidate element. This is a lookahead
-method so the heavylifting job would be done during on_next() method call
-whereas next() simply returns a pre-cached value.
+method so the heavylifting job would be done during C<on_next()> method call
+whereas C<next()> simply returns a pre-cached value.
 
-$max_lookahead is an integer, defaults to 0 meaning no limit.
+C<$max_lookahead> is an integer, defaults to 0 meaning no limit.
 
 =cut
 
@@ -625,8 +626,8 @@ sub yield {
 =head2 empty()
 
 Returns an empty enumerable. Effectively it means an equivalent of an empty
-array. has_next() will return false and next() will return undef. Useful
-whenever a on_next() step wants to return an empty resultset.
+array. C<has_next()> will return false and C<next()> will return undef. Useful
+whenever a C<on_next()> step wants to return an empty resultset.
 
 =cut
 
@@ -659,7 +660,7 @@ sub singular {
 
 Returns a new enumerable instantiated from a list. The easiest way to
 initialize an enumerable. In fact, all elements are already resolved
-so this method sets is_finite=1 by default.
+so this method sets C<is_finite=1> by default.
 
 =cut
 
@@ -675,10 +676,34 @@ sub from_list {
   });
 }
 
+=head2 cycle()
+
+Creates an infinitive enumerable by cycling the original list. E.g. if the
+original list is [1, 2, 3], C<cycle()> will generate an infinitive sequences
+like: 1, 2, 3, 1, 2, 3, 1, ...
+
+=cut
+
+sub cycle {
+  my $class = shift;
+  my @list = @_;
+  my $ix = 0;
+  my $max_ix = scalar(@list) - 1;
+  Data::Enumerable::Lazy->new({
+    on_has_next => sub { 1 },
+    on_next     => sub {
+      $ix = $ix > $max_ix ? 0 : $ix;
+      shift->yield($list[$ix++])
+    },
+    is_finite   => 0,
+    _no_wrap    => 1,
+  });
+}
+
 =head2 infinity()
 
-Returns a new infinite enumerable. has_next() always returns true whereas
-next() returns undef all the time. Useful as an extension basis for infinite
+Returns a new infinite enumerable. C<has_next()> always returns true whereas
+C<next()> returns undef all the time. Useful as an extension basis for infinite
 sequences.
 
 =cut
