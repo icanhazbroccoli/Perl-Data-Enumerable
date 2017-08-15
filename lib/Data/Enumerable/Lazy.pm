@@ -279,12 +279,52 @@ use Moose;
 use Moose::Util::TypeConstraints;
 use Carp;
 
+=head1 Instance attributes
+
+=head2 on_next($self, $element) :: CodeRef -> Data::Enumerable::Lazy | Any
+
+C<on_next> is a code ref, a callback which is being called every time the
+generator is in demand for a new bit of data. Enumerable buffers up the result
+of the previous calculation and if there are no more elements left in the
+buffer, C<on_next()> would be called.
+
+C<$element> is defined when the current collection is a contuniation of another
+enumerable. I.e.:
+  my $enum = Data::Enumerable::Lazy->from_list(1, 2, 3);
+  my $enum2 = $enum->continue({
+    on_next => sub { my ($self, $i) = @_; $self->yield($i * $i) }
+  });
+  $enum2->to_list; # generates 1, 4, 9
+In this case $i would be defined and it comes from the original enumerable.
+
+The function is supposed to return an enumerable, in this case it would be
+kept as the buffer object. If this function method returns any other value,
+it would be wrapped in a C<Data::Enumerable::Lazy->singular()>. There is a
+way to prevent an enumerable from wrapping your return value in an enum and
+keeping it in a raw state by providing C<_no_wrap=1>.
+
+=cut
+
 has on_next => (
   is => 'ro',
   isa => 'CodeRef',
   lazy => 1,
   default => sub {  },
 );
+
+=head2 on_has_next($self) :: CodeRef -> Bool
+
+C<on_has_next> is a code ref, a callback to be called whenever the enumerable
+is about to resolve C<has_next()> method call. Similar to C<on_next()> call,
+this one is also triggered whenever an enumerable runs out of buffered
+elements. The function shoiuld return boolean.
+
+A method that returns 1 all the time is the way to initialize an infinite
+enumerable (see C<infinity()>). If it returns 0 no matter what, it would be
+an empty enumerable (see C<empty()>). Normally you want to stay somewhere in
+the middle and implement some state check login in there.
+
+=cut
 
 has on_has_next => (
   is => 'ro',
@@ -293,6 +333,17 @@ has on_has_next => (
   default => sub { sub { 0 } },
 );
 
+=head2 is_finite :: Bool
+
+A boolean flag indicating whether an enumerable is finite or not. By default
+enumerables are treated as infinite, which means some functions will throw
+an exception, like: C<to_list()> or C<resolve()>.
+
+Make sure to not mark an enumerable as finite and to call finite-size defined
+methods, in this case it will create an infinite loop on the resolution.
+
+=cut
+
 has is_finite => (
   is => 'ro',
   isa => 'Bool',
@@ -300,12 +351,26 @@ has is_finite => (
   default => sub { 0 },
 );
 
+=head2 _buff :: Data::Enumerable::Lazy
+
+The buffer attribute. Could be modified only if the starting state has to be
+restored. Normally one doesn't modify this attribure by default.
+
+=cut
+
 has _buff => (
   is => 'rw',
   isa => 'Undef | Data::Enumerable::Lazy',
   lazy => 1,
   default => sub {},
 );
+
+=head2 _no_wrap :: Bool
+
+A boolean flag indicating whether C<yield()> has to wrap the return value in
+another enumerable. True by default.
+
+=cut
 
 has _no_wrap => (
   is => 'ro',
@@ -379,15 +444,6 @@ sub has_next {
   return int $res;
 }
 
-sub _has_next_in_buffer {
-  my $self = shift;
-  defined($self->_buff) && $self->_buff->has_next;
-}
-sub _has_next_in_generator {
-  my $self = shift;
-  $self->on_has_next->($self, @_);
-}
-
 =head2 to_list()
 
 This function transforms a lazy enumerable to a list. Only finite enumerables
@@ -416,7 +472,7 @@ sub map {
   my ($self, $callback) = @_;
   Data::Enumerable::Lazy->new({
     on_has_next => $self->on_has_next,
-    on_next     => sub { shift; $callback->($self, @_) },
+    on_next     => sub { shift->yield($callback->($self->next)) },
     is_finite   => $self->is_finite,
     _no_wrap    => $self->_no_wrap,
   });
@@ -619,6 +675,18 @@ sub yield {
   } else {
     return Data::Enumerable::Lazy->singular($val);
   }
+}
+
+# Private methods
+
+sub _has_next_in_buffer {
+  my $self = shift;
+  defined($self->_buff) && $self->_buff->has_next;
+}
+
+sub _has_next_in_generator {
+  my $self = shift;
+  $self->on_has_next->($self, @_);
 }
 
 =head1 Class methods
