@@ -309,7 +309,7 @@ has on_next => (
   is => 'ro',
   isa => 'CodeRef',
   lazy => 1,
-  default => sub {  },
+  default => sub { sub {} },
 );
 
 =head2 on_has_next($self) :: CodeRef -> Bool
