@@ -278,6 +278,7 @@ grep out corrupted ones and proceed with the mesages.
 use Moose;
 use Moose::Util::TypeConstraints;
 use Carp;
+use List::Util;
 
 =head1 Instance attributes
 
@@ -586,22 +587,14 @@ sub take {
   return \@acc;
 }
 
-=head2 take_while($callback, $max_lookahead)
+=head2 take_while($callback)
 
-Iterates over an enumerable until $callback returns false or $max_lookahead
-number of lookahead steps has been made.
-
-$callback takes 2 arguments: $self and a candidate element. This is a lookahead
-method so the heavylifting job would be done during C<on_next()> method call
-whereas C<next()> simply returns a pre-cached value.
-
-C<$max_lookahead> is an integer, defaults to 0 meaning no limit.
+TODO
 
 =cut
 
 sub take_while {
-  my ($self, $callback, $max_lookahead) = @_;
-  $max_lookahead //= 0;
+  my ($self, $callback) = @_;
   my $next_el;
   my $prev_has_next;
   my $initialized = 0;
@@ -610,19 +603,22 @@ sub take_while {
       $initialized = 1;
       defined $prev_has_next
         and return $prev_has_next;
-      my $lookahead = 0;
-      while ($self->has_next) {
+      $prev_has_next = 0;
+      if ($self->has_next) {
         $next_el = $self->next;
-        $lookahead++;
-        return $prev_has_next = 0 if $max_lookahead > 0 && $lookahead > $max_lookahead;
-        return $prev_has_next = 1 if $callback->($self, $next_el);
+        if ($callback->($next_el)) {
+          $prev_has_next = 1;
+        }
       }
-      return $prev_has_next = 0;
+      return $prev_has_next;
     },
     on_next => sub {
-      $initialized or $self->has_next();
+      my ($new_self) = @_;
+      $initialized or $new_self->has_next;
+      $prev_has_next
+        or return $new_self->yield(Data::Enumerable::Lazy->empty);
       undef $prev_has_next;
-      shift->yield($next_el);
+      $new_self->yield($next_el);
     },
     is_finite => $self->is_finite,
   });
@@ -784,6 +780,31 @@ sub infinity {
     _is_finite  => 0,
     _no_wrap    => 1,
   });
+}
+
+=head2 merge()
+
+TODO
+
+=cut
+
+sub merge {
+  my $class = shift;
+  my @streams = @_;
+  scalar @streams == 0
+    and croak 'merge function takes at least 1 stream';
+  scalar @streams == 1
+    and return shift;
+  my $ixs = Data::Enumerable::Lazy->cycle(0..scalar(@streams) - 1)
+      -> take_while(sub { List::Util::any { $_->has_next } @streams })
+      -> grep(sub { $streams[ shift ]->has_next });
+  Data::Enumerable::Lazy->new(
+    on_has_next => sub { $ixs->has_next },
+    on_next     => sub {
+      shift->yield($streams[ $ixs->next ]->next);
+    },
+    is_finite   => (List::Util::reduce { $a || $b->is_finite } 0, @streams),
+  );
 }
 
 1;
