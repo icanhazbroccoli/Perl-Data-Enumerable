@@ -7,24 +7,36 @@ use warnings;
 
 =pod
 
-=head1 Data::Enumerable::Lazy
+=head1 NAME
 
-=head2 About
+Data::Enumerable::Lazy
 
-This package is a lazy enumerable implementation for Perl5. Also known as:
-(sequence) generator, stream. This library is handy for an infinitive
-sequence representation (in this case a developer has to implement 2
-callbacks: a quick next-element-existance check and the generator function
-itself. It is also a convinient solution whenever the number of the iterations
-in not known in advance (see examples section).
+=head1 SYNOPSIS
 
-This package implements lazy enumerables as a mix of a generic sequence and an
-iterator with a state at the same state. Every sequence has a state. The state
-is defined by the internal iterator position.
+A basic lazy range implementation picking even numbers only:
+  my ($from, $to) = (0, 10);
+  my $current = $from;
+  my $stream = Data::Enumerable::Lazy->new({
+    on_has_next => sub { $current <= $to          },
+    on_next     => sub { shift->yield($current++) },
+  })->grep(sub{ shift % 2 == 0 });
+  $stream->to_list(); # generates: [0, 2, 4, 6, 8, 10]
 
-Enumerables use internal buffers in order to transparently support batched step
-resolution. It doesn't stop enumerables from resolving sequence elements one by
-one.
+=head2 DESCRIPTION
+
+This library is another one implementation of a lazy generator + enumerable
+for Perl5. It might be handy if the elements of the collection are resolved on
+the flight and the iteration itself should be hidden from the end users.
+
+The enumerables are single-pass composable calculation units. What it means:
+An enumerable is stateful, once it reached the end of the sequence, it will
+not rewind to the beginning unless explicitly specified.
+Enumerables are composable: one enumerable might be an extension of another by
+applying some additional logic. An enumerable resolves elements one-by-one, and
+the result might be another enumerable, which might produce another enumerables
+etc. In this case enumerables become recursive, but for the end user it will
+still look like a flat collection. This is one of the main features of this
+library.
 
   [enumerable.has_next] -> [_buffer.has_next] -> yes -> return true
                                               -> no -> result = [enumerable.on_has_next] -> return result
@@ -32,12 +44,9 @@ one.
   [enumerable.next] -> [_buffer.has_next] -> yes -> return [_buffer.next]
                                           -> no -> result = [enumerable.next] -> [enumerable.set_buffer(result)] -> return result
 
-A buffer is also an enumerable. This feature allows one to nest enumerables
-as many times as needed.
+=head1 EXAMPLES
 
-=head1 Examples
-
-=head4 A basic range
+=head2 A basic range
 
 This example implements a range generator from $from until $to. In order to
 generate this range we define 2 callbacks: C<on_has_next()> and C<on_next()>.
@@ -80,7 +89,7 @@ Usage:
   is $range->has_next, 0, '$range has been iterated completely'
   is $range->next, undef, 'A fully iterated sequence returns undef on next()'
 
-=head4 Prime numbers
+=head2 Prime numbers
 
 Prime numbers is an infinite sequence of natural numbers. This example
 implements a very basic prime number generator.
@@ -113,7 +122,7 @@ will throw an exception claiming it's an infinitive sequence. Therefore, we
 should use C<next()> in order to get elements one by one or use another handy
 method C<take()> which returns first N results.
 
-=head4 Nested enumerables
+=head2 Nested enumerables
 
 In this example we will output a numbers of a multiplication table 10x10.
 What's interesting in this example is that there are 2 sequences: primary and
@@ -160,7 +169,7 @@ Let's iterate the sequence step by step and see what happens inside.
                          # primary sequence on_has_next() says there is nothing
                          # more to iterate over.
 
-=head4 DBI paginator example
+=head2 DBI paginator example
 
 As mentioned earlier, lazy enumerables are useful when the number of the
 elements in the sequence is not known in advance. So far, we were looking at
@@ -209,7 +218,7 @@ size and might work on a rapidly growing dataset.
 In order to reduce the number of queries, we query the data in batches by 10
 elements max.
 
-=head4 Redis queue consumer
+=head2 Redis queue consumer
 
   use Redis;
 
@@ -230,7 +239,7 @@ In this example the client is blocked until there is an element available in
 the queue, but it's hidden away from the clients who consume the data item by
 item.
 
-=head4 Kafka example
+=head2 Kafka example
 
 Kafka consumer wrapper is another example of a lazy calculation application.
 Lazy enumerables are very naturally co-operated with streaming data, like
@@ -280,7 +289,7 @@ use Moose::Util::TypeConstraints;
 use Carp;
 use List::Util;
 
-=head1 Instance attributes
+=head1 OPTIONS
 
 =head2 on_next($self, $element) :: CodeRef -> Data::Enumerable::Lazy | Any
 
@@ -380,7 +389,7 @@ has _no_wrap => (
   default => sub { 0 },
 );
 
-=head1 Instance methods
+=head1 INSTANCE METHODS
 
 =head2 next()
 
@@ -589,7 +598,10 @@ sub take {
 
 =head2 take_while($callback)
 
-TODO
+This function takes elements until it meets the first one that does not
+satisfy the conditional callback.
+The callback takes only 1 argument: an element. It should return true if
+the element should be taken. Once it returned false, the stream is over.
 
 =cut
 
@@ -685,7 +697,7 @@ sub _has_next_in_generator {
   $self->on_has_next->($self, @_);
 }
 
-=head1 Class methods
+=head1 CLASS METHODS
 
 =head2 empty()
 
@@ -782,9 +794,16 @@ sub infinity {
   });
 }
 
-=head2 merge()
+=head2 merge($stream1 [, $stream2 [, $stream3 [, ...]]])
 
-TODO
+This function merges one or more streams together by fan-outing C<next()>
+method call among the non-empty streams.
+Returns a new enumerable instance, which:
+  * Has next elements as far as at least one of the streams does.
+  * Returns next element py picking it one-by-one from the streams.
+  * Is finite if and only if all the streams are finite.
+If one of the streams is over, it would be taken into account and
+C<next()> will continue choosing from non-empty ones.
 
 =cut
 
@@ -792,7 +811,7 @@ sub merge {
   my $class = shift;
   my @streams = @_;
   scalar @streams == 0
-    and croak 'merge function takes at least 1 stream';
+    and croak '`merge` function takes at least 1 stream';
   scalar @streams == 1
     and return shift;
   my $ixs = Data::Enumerable::Lazy->cycle(0..scalar(@streams) - 1)
@@ -806,6 +825,36 @@ sub merge {
     is_finite   => (List::Util::reduce { $a || $b->is_finite } 0, @streams),
   );
 }
+
+=head1 AUTHOR
+
+Oleg S <me@whitebox.io>
+
+=cut
+
+=head1 SEE ALSO
+
+=head2 Library GitHub page:
+
+L<https://github.com/icanhazbroccoli/Perl-Data-Enumerable-Lazy>
+
+=head2 Alternative implementations:
+
+L<https://metacpan.org/pod/List::Generator>
+L<https://metacpan.org/pod/Generator::Object>
+L<https://metacpan.org/pod/Iterator>
+
+=cut
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2017 Oleg S <me@whitebox.io>
+
+Copying and distribution of this file, with or without modification, are
+permitted in any medium without royalty provided the copyright notice and this
+notice are preserved. This file is offered as-is, without any warranty.
+
+=cut
 
 1;
 
