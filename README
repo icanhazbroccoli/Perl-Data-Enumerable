@@ -2,11 +2,15 @@ NAME
     Data::Enumerable::Lazy
 
 SYNOPSIS
-    A basic lazy range implementation picking even numbers only: my ($from,
-    $to) = (0, 10); my $current = $from; my $tream =
-    Data::Enumerable::Lazy->new({ on_has_next => sub { $current <= $to },
-    on_next => sub { shift->yield($current++) }, })->grep(sub{ shift % 2 ==
-    0 }); $tream->to_list(); # generates: [0, 2, 4, 6, 8, 10]
+    A basic lazy range implementation picking even numbers only:
+
+      my ($from, $to) = (0, 10);
+      my $current = $from;
+      my $tream = Data::Enumerable::Lazy->new({
+        on_has_next => sub { $current <= $to          },
+        on_next     => sub { shift->yield($current++) },
+      })->grep(sub{ shift % 2 == 0 });
+      $tream->to_list(); # generates: [0, 2, 4, 6, 8, 10]
 
   DESCRIPTION
     This library is another one implementation of a lazy generator +

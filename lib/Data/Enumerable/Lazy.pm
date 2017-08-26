@@ -14,6 +14,7 @@ Data::Enumerable::Lazy
 =head1 SYNOPSIS
 
 A basic lazy range implementation picking even numbers only:
+
   my ($from, $to) = (0, 10);
   my $current = $from;
   my $tream = Data::Enumerable::Lazy->new({
