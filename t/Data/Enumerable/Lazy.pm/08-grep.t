@@ -31,10 +31,19 @@ my @tests = (
 {
   foreach my $test (@tests) {
     my ($given, $grep_sub, $expected, $descr) = @$test{qw(given grep_sub expected descr)};
-    my $stream = Data::Enumerable::Lazy->from_list(@{ $given })->grep($grep_sub);
+    my $tream = Data::Enumerable::Lazy
+      -> from_list(@{ $given })
+      -> grep($grep_sub);
 
-    is_deeply $stream->to_list, $expected, $descr;
+    is_deeply $tream->to_list, $expected, $descr;
   }
+}
+
+{
+  my $tream = Data::Enumerable::Lazy->singular(42);
+  do { ok $tream->has_next, 'has_next buffers the result' } for 1..10;
+  is $tream->next, 42, 'returns the buffered value';
+  do { ok ! $tream->has_next, 'has_next takes into account the original source is over' } for 1..10;
 }
 
 done_testing;

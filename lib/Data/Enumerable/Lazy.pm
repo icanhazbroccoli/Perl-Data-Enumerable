@@ -16,11 +16,11 @@ Data::Enumerable::Lazy
 A basic lazy range implementation picking even numbers only:
   my ($from, $to) = (0, 10);
   my $current = $from;
-  my $stream = Data::Enumerable::Lazy->new({
+  my $tream = Data::Enumerable::Lazy->new({
     on_has_next => sub { $current <= $to          },
     on_next     => sub { shift->yield($current++) },
   })->grep(sub{ shift % 2 == 0 });
-  $stream->to_list(); # generates: [0, 2, 4, 6, 8, 10]
+  $tream->to_list(); # generates: [0, 2, 4, 6, 8, 10]
 
 =head2 DESCRIPTION
 
@@ -652,6 +652,8 @@ sub continue {
   my %ext = %$ext;
   my $on_next = delete $ext{on_next}
     or croak '`on_next` should be defined on stream continuation';
+  ref($on_next) eq 'CODE'
+    or croak '`on_next` should be a function';
   Data::Enumerable::Lazy->new({
     on_next => sub {
       my $self = shift;
@@ -794,7 +796,7 @@ sub infinity {
   });
 }
 
-=head2 merge($stream1 [, $stream2 [, $stream3 [, ...]]])
+=head2 merge($tream1 [, $tream2 [, $tream3 [, ...]]])
 
 This function merges one or more streams together by fan-outing C<next()>
 method call among the non-empty streams.
@@ -833,6 +835,10 @@ Oleg S <me@whitebox.io>
 =cut
 
 =head1 SEE ALSO
+
+=head2 Lazy evaluation in a nutshell
+
+L<https://en.wikipedia.org/wiki/Lazy_evaluation>
 
 =head2 Library GitHub page:
 
