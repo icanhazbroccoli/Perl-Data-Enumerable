@@ -317,9 +317,9 @@ keeping it in a raw state by providing C<_no_wrap=1>.
 =cut
 
 has on_next => (
-  is => 'ro',
-  isa => 'CodeRef',
-  lazy => 1,
+  is      => 'ro',
+  isa     => 'CodeRef',
+  lazy    => 1,
   default => sub { sub {} },
 );
 
@@ -338,10 +338,26 @@ the middle and implement some state check login in there.
 =cut
 
 has on_has_next => (
-  is => 'ro',
-  isa => 'CodeRef',
-  lazy => 1,
+  is      => 'ro',
+  isa     => 'CodeRef',
+  lazy    => 1,
   default => sub { sub { 0 } },
+);
+
+=head2 on_reset($self) :: CodeRef -> void
+
+This is a callback to be called in order to reset the state of the enumerable.
+This callback should be defined in the same scope as the enumerable itself.
+The library provides nothing magical but a callback and a handle to call it,
+so the state cleanup is completely on the developer's side.
+
+=cut
+
+has on_reset => (
+  is      => 'ro',
+  isa     => 'CodeRef',
+  lazy    => 1,
+  default => sub { sub {} },
 );
 
 =head2 is_finite :: Bool
@@ -356,37 +372,25 @@ methods, in this case it will create an infinite loop on the resolution.
 =cut
 
 has is_finite => (
-  is => 'ro',
-  isa => 'Bool',
-  lazy => 1,
+  is      => 'ro',
+  isa     => 'Bool',
+  lazy    => 1,
   default => sub { 0 },
 );
 
-=head2 _buff :: Data::Enumerable::Lazy
-
-The buffer attribute. Could be modified only if the starting state has to be
-restored. Normally one doesn't modify this attribure by default.
-
-=cut
+# Private attributes
 
 has _buff => (
-  is => 'rw',
-  isa => 'Undef | Data::Enumerable::Lazy',
-  lazy => 1,
+  is      => 'rw',
+  isa     => 'Undef | Data::Enumerable::Lazy',
+  lazy    => 1,
   default => sub {},
 );
 
-=head2 _no_wrap :: Bool
-
-A boolean flag indicating whether C<yield()> has to wrap the return value in
-another enumerable. True by default.
-
-=cut
-
 has _no_wrap => (
-  is => 'ro',
-  isa => 'Bool',
-  lazy => 1,
+  is      => 'ro',
+  isa     => 'Bool',
+  lazy    => 1,
   default => sub { 0 },
 );
 
@@ -428,7 +432,7 @@ sub next {
 =head2 has_next()
 
 C<has_next()> is the primary entry point to get an information about the state
-of an enumetable. If the method returned false, there are no more elements to be
+of an enumerable. If the method returned false, there are no more elements to be
 consumed. I.e. the sequence has been iterated completely. Normally it means
 the end of an iteration cycle.
 
@@ -455,10 +459,24 @@ sub has_next {
   return int $res;
 }
 
+=head2 reset()
+
+This method is a generic entry point for a enum reset. In fact, it is basically 
+a wrapper around user-defined C<on_reset()>.
+
+=cut
+
+sub reset {
+  my $self = shift;
+  eval { $self->on_reset(); 1 } or do {
+    croak sprintf('Problem calling on_reset(): %s', $@ // 'zombie error');
+  };
+}
+
 =head2 to_list()
 
 This function transforms a lazy enumerable to a list. Only finite enumerables
-can be transformed to a list, so the method checks if an enumetable is created
+can be transformed to a list, so the method checks if an enumerable is created
 with C<is_finite=1> flag. An exception would be thrown otherwise.
 
 =cut

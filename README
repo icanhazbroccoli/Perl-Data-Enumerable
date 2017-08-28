@@ -299,6 +299,13 @@ OPTIONS
     stay somewhere in the middle and implement some state check login in
     there.
 
+  on_reset($self) :: CodeRef -> void
+    This is a callback to be called in order to reset the state of the
+    enumerable. This callback should be defined in the same scope as the
+    enumerable itself. The library provides nothing magical but a callback
+    and a handle to call it, so the state cleanup is completely on the
+    developer's side.
+
   is_finite :: Bool
     A boolean flag indicating whether an enumerable is finite or not. By
     default enumerables are treated as infinite, which means some functions
@@ -307,14 +314,6 @@ OPTIONS
     Make sure to not mark an enumerable as finite and to call finite-size
     defined methods, in this case it will create an infinite loop on the
     resolution.
-
-  _buff :: Data::Enumerable::Lazy
-    The buffer attribute. Could be modified only if the starting state has
-    to be restored. Normally one doesn't modify this attribure by default.
-
-  _no_wrap :: Bool
-    A boolean flag indicating whether `yield()' has to wrap the return value
-    in another enumerable. True by default.
 
 INSTANCE METHODS
   next()
@@ -338,7 +337,7 @@ INSTANCE METHODS
 
   has_next()
     `has_next()' is the primary entry point to get an information about the
-    state of an enumetable. If the method returned false, there are no more
+    state of an enumerable. If the method returned false, there are no more
     elements to be consumed. I.e. the sequence has been iterated completely.
     Normally it means the end of an iteration cycle.
 
@@ -350,10 +349,14 @@ INSTANCE METHODS
     `on_next()' should be fast on resolving the state of an enumerable as
     it's going to be used for a condition state check.
 
+  reset()
+    This method is a generic entry point for a enum reset. In fact, it is
+    basically a wrapper around user-defined `on_reset()'.
+
   to_list()
     This function transforms a lazy enumerable to a list. Only finite
     enumerables can be transformed to a list, so the method checks if an
-    enumetable is created with `is_finite=1' flag. An exception would be
+    enumerable is created with `is_finite=1' flag. An exception would be
     thrown otherwise.
 
   map($callback)
