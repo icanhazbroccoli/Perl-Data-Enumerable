@@ -31,13 +31,13 @@ the flight and the iteration itself should be hidden from the end users.
 
 The enumerables are single-pass composable calculation units. What it means:
 An enumerable is stateful, once it reached the end of the sequence, it will
-not rewind to the beginning unless explicitly specified.
+not rewind to the beginning unless explicitly forced to.
 Enumerables are composable: one enumerable might be an extension of another by
-applying some additional logic. An enumerable resolves elements one-by-one, and
-the result might be another enumerable, which might produce another enumerables
-etc. In this case enumerables become recursive, but for the end user it will
-still look like a flat collection. This is one of the main features of this
-library.
+applying some additional logic. Enumerables resolve steps on demand, one by one.
+A single step might return another enumerable (micro batches). The library
+flattens these enumerables, so for the end user this looks like a single
+continuous sequence of elements.
+
 
   [enumerable.has_next] -> [_buffer.has_next] -> yes -> return true
                                               -> no -> result = [enumerable.on_has_next] -> return result
