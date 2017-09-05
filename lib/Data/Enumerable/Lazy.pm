@@ -42,10 +42,13 @@ and so on and so forth. But it definitely does not force the micro-batched way.
 
 A quick example: let's say there is a task: read multiple plain text files
 word-by-word. This task contains several nesting enumerable loops:
+
   -> file
     -> line
       -> word (we assume there is no word wrap, but it's not a problem for our model)
+
 Implemented in imperative style, the program would look like:
+
   foreach my $file (@files) {
     foreach my $line ($file->read_lines) {
       foreach my $word ($line->split_words) {
@@ -53,17 +56,20 @@ Implemented in imperative style, the program would look like:
       }
     }
   }
+
 Let's say there is one more level of complexity: multi-partition setup:
+
   foreach my $partition (@partitions) {
     foreach my $file ($partition->ls_files) {
       ...
     }
   }
+
 We have to implement the loops over and over again, exposing the internal
 knowledge about the partitions, files, lines etc. But we can do it better.
 Let's examine a lazy enumerable approach:
-  use aliased 'Data::Enumerable::Lazy' => 'Enum';
-  my $enum = Enum::from_list(@partitions)
+
+  my $enum = Data::Enumerable::Lazy::from_list(@partitions)
     -> continue({ on_has_next => sub { my ($self, $partition) = @_; $self->yield($partition->ls_files) } })
     -> continue({ on_has_next => sub { my ($self, $file)      = @_; $self->yield($file->read_lines   ) } })
     -> continue({ on_has_next => sub { my ($self, $line)      = @_; $self->yield($line->split_words  ) } });
