@@ -13,7 +13,10 @@ Data::Enumerable::Lazy
 
 =head1 SYNOPSIS
 
-A basic lazy range implementation picking even numbers only:
+The library implements a lazy enumerator/generator pattern and is optimised
+for non-flat collections (resolves and flattens sub-, subsub-, ... collections).
+
+A basic lazy generator producing even numbers in a given range:
 
   my ($from, $to) = (0, 10);
   my $current = $from;
@@ -25,25 +28,70 @@ A basic lazy range implementation picking even numbers only:
 
 =head2 DESCRIPTION
 
-This library is another one implementation of a lazy generator + enumerable
-for Perl5. It might be handy if the elements of the collection are resolved on
-the flight and the iteration itself should be hidden from the end users.
+This library is yet another implementation of lazy generator + enumerable
+pattern for Perl5. First of all, it is not a parallel calculation framework.
+If you are solving some parallelism problems, check out L<Generator::Object|https://metacpan.org/pod/Generator::Object>.
 
-The enumerables are single-pass composable calculation units. What it means:
-An enumerable is stateful, once it reached the end of the sequence, it will
-not rewind to the beginning unless explicitly forced to.
-Enumerables are composable: one enumerable might be an extension of another by
-applying some additional logic. Enumerables resolve steps on demand, one by one.
-A single step might return another enumerable (micro batches). The library
-flattens these enumerables, so for the end user this looks like a single
-continuous sequence of elements.
+This library provides some building blocks for lazy data manipulation. One
+of the key features of this library is that it abstracts the end users away
+from a multi-level nested sub-collection enumeration whereas a classical
+enumerator normally operates within a flat collection context. Think of it
+this way: this library provides a built-in functionality to resolve enumerable
+steps in micro-batches, and these micro-batches might be enumerables as well
+and so on and so forth. But it definitely does not force the micro-batched way.
 
+A quick example: let's say there is a task: read multiple plain text files
+word-by-word. This task contains several nesting enumerable loops:
+  -> file
+    -> line
+      -> word (we assume there is no word wrap, but it's not a problem for our model)
+Implemented in imperative style, the program would look like:
+  foreach my $file (@files) {
+    foreach my $line ($file->read_lines) {
+      foreach my $word ($line->split_words) {
+        # do something
+      }
+    }
+  }
+Let's say there is one more level of complexity: multi-partition setup:
+  foreach my $partition (@partitions) {
+    foreach my $file ($partition->ls_files) {
+      ...
+    }
+  }
+We have to implement the loops over and over again, exposing the internal
+knowledge about the partitions, files, lines etc. But we can do it better.
+Let's examine a lazy enumerable approach:
+  use aliased 'Data::Enumerable::Lazy' => 'Enum';
+  my $enum = Enum::from_list(@partitions)
+    -> continue({ on_has_next => sub { my ($self, $partition) = @_; $self->yield($partition->ls_files) } })
+    -> continue({ on_has_next => sub { my ($self, $file)      = @_; $self->yield($file->read_lines   ) } })
+    -> continue({ on_has_next => sub { my ($self, $line)      = @_; $self->yield($line->split_words  ) } });
+
+  while ($enum->has_next) {
+    my $word = $enum->next;
+    # do something
+  }
+
+The benefit is that the end user might have zero knowledge about partitions,
+files, lines, etc. Adding a new nesting loop for multi-computer fetch? Easy.
+
+The end user is focused on consuming the words, not intermediate stages.
+A wrapper library might hide the implementation details and return the
+enumerable back to the end user.
+
+Enumerables are single-pass calculation units. What it means: an enumerable is
+stateful, once it reached the end of the sequence, it will not rewind to the
+beginning.
+
+Enumerables have internal buffer: another enumerable which preserves the
+pre-fetched collection. The fig. above illustrates the buffering algorithm.
 
   [enumerable.has_next] -> [_buffer.has_next] -> yes -> return true
                                               -> no -> result = [enumerable.on_has_next] -> return result
 
   [enumerable.next] -> [_buffer.has_next] -> yes -> return [_buffer.next]
-                                          -> no -> result = [enumerable.next] -> [enumerable.set_buffer(result)] -> return result
+                                          -> no -> result = [enumerable.next] -> [enumerable.set_buffer(result)] -> return result.next
 
 =head1 EXAMPLES
 
