@@ -97,7 +97,7 @@ pre-fetched collection. The fig. above illustrates the buffering algorithm.
                                               -> no -> result = [enumerable.on_has_next] -> return result
 
   [enumerable.next] -> [_buffer.has_next] -> yes -> return [_buffer.next]
-                                          -> no -> result = [enumerable.next] -> [enumerable.set_buffer(result)] -> return result.next
+                                          -> no -> result = [enumerable.next] -> [enumerable.set_buffer(result)] -> return _buffer.next
 
 =head1 EXAMPLES
 
