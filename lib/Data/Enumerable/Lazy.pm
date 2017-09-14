@@ -515,7 +515,7 @@ sub has_next {
 
 =head2 reset()
 
-This method is a generic entry point for a enum reset. In fact, it is basically 
+This method is a generic entry point for a enum reset. In fact, it is basically
 a wrapper around user-defined C<on_reset()>.
 
 =cut
@@ -886,18 +886,34 @@ sub merge {
   my $class = shift;
   my @streams = @_;
   scalar @streams == 0
-    and croak '`merge` function takes at least 1 stream';
+    and croak 'merge function takes at least 1 stream';
   scalar @streams == 1
     and return shift;
-  my $ixs = Data::Enumerable::Lazy->cycle(0..scalar(@streams) - 1)
-      -> take_while(sub { List::Util::any { $_->has_next } @streams })
-      -> grep(sub { $streams[ shift ]->has_next });
+  my @full_streams = grep { $_->has_next } @streams;
+  my $ix = 0;
+  use Data::Dumper;
   Data::Enumerable::Lazy->new(
-    on_has_next => sub { $ixs->has_next },
-    on_next     => sub {
-      shift->yield($streams[ $ixs->next ]->next);
+    on_has_next => sub { List::Util::any { $_->has_next } @full_streams },
+    on_next => sub {
+      my ($self) = @_;
+      my $res;
+      while (scalar(@full_streams) > 0) {
+        my $full_streams_cnt = scalar @full_streams;
+        $ix %= $full_streams_cnt
+          if $ix >= $full_streams_cnt;
+        if ($full_streams[$ix]->has_next) {
+          $res = $full_streams[$ix]->next;
+          $ix++;
+          last;
+        } else {
+          splice(@full_streams, $ix, 1);
+          next;
+        }
+      }
+      $self->yield($res);
     },
-    is_finite   => (List::Util::reduce { $a || $b->is_finite } 0, @streams),
+    _no_wrap => 1,
+    is_finite => scalar(@full_streams) ? (List::Util::reduce { $a || $b->is_finite } 0, @full_streams) : 1,
   );
 }
 
