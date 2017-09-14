@@ -891,7 +891,6 @@ sub merge {
     and return shift;
   my @full_streams = grep { $_->has_next } @streams;
   my $ix = 0;
-  use Data::Dumper;
   Data::Enumerable::Lazy->new(
     on_has_next => sub { List::Util::any { $_->has_next } @full_streams },
     on_next => sub {
