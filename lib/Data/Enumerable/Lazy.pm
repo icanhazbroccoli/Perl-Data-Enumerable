@@ -575,7 +575,7 @@ sub reduce {
   my ($self, $acc, $callback) = @_;
   croak 'Only finite enumerables might be reduced. Use is_finite=1'
     unless $self->is_finite;
-  ($acc = $callback->($self, $acc, $self->next)) while $self->has_next;
+  ($acc = $callback->($acc, $self->next)) while $self->has_next;
   return $acc;
 }
 
