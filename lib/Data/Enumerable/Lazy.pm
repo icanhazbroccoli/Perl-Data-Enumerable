@@ -732,7 +732,7 @@ sub continue {
       my $self = shift;
       $self->yield($on_next->($self, $this->next));
     },
-    on_has_next => delete $ext->{on_has_next} // $this->on_has_next,
+    on_has_next => delete $ext->{on_has_next} // sub { $this->has_next() },
     is_finite   => delete $ext->{is_finite}   // $this->is_finite,
     _no_wrap    => delete $ext->{_no_wrap}    // 0,
     %ext,
