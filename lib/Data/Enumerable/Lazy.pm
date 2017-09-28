@@ -818,6 +818,8 @@ so this method sets C<is_finite=1> by default.
 sub from_list {
   my $class = shift;
   my @list = @_;
+  sclar(@list)
+    or return Data::Enumerable::Lazy->empty();
   my $ix = 0;
   Data::Enumerable::Lazy->new({
     on_has_next => sub { $ix < scalar(@list) },
