@@ -930,6 +930,29 @@ sub merge {
   );
 }
 
+=head2 chain($tream1[, $tream2[, $stream3[, ...]]])
+
+This function builds a chain of enumerables which would be resolved one-by-one.
+Note if some substreams in the middle are infinitive, the following ones would
+never be resolved. Empty streams would be filtered out and ignored.
+
+=cut
+
+sub chain {
+  my ($class) = shift;
+  my @streams = @_;
+  scalar(@streams)
+    or return Data::Enumerable::Lazy->empty;
+  Data::Enumerable::Lazy->from_list(@streams)
+    -> grep(sub { $_[0]->has_next() })
+    -> continue({
+      on_next => sub {
+        $_[0]->yield($_[1]);
+      },
+      _no_wrap => 0,
+    });
+}
+
 =head1 AUTHOR
 
 Oleg S <me@whitebox.io>
