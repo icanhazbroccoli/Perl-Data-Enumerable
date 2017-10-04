@@ -432,6 +432,18 @@ has is_finite => (
   default => sub { 0 },
 );
 
+=head2 extra :: Any
+
+A container to store any user-defined information.
+
+=cut
+
+has extra => (
+  is      => 'rw',
+  isa     => 'Any',
+  default => sub { +{} },
+);
+
 # Private attributes
 
 has _buff => (
@@ -818,7 +830,7 @@ so this method sets C<is_finite=1> by default.
 sub from_list {
   my $class = shift;
   my @list = @_;
-  sclar(@list)
+  scalar(@list)
     or return Data::Enumerable::Lazy->empty();
   my $ix = 0;
   Data::Enumerable::Lazy->new({
