@@ -521,7 +521,7 @@ sub reduce {
   my ($self, $acc, $callback) = @_;
   croak 'Only finite enumerables might be reduced. Use is_finite=1'
     unless $self->is_finite;
-  ($acc = $callback->($self, $acc, $self->next)) while $self->has_next;
+  ($acc = $callback->($acc, $self->next)) while $self->has_next;
   return $acc;
 }
 
@@ -845,6 +845,24 @@ sub merge {
     },
     is_finite   => (List::Util::reduce { $a || $b->is_finite } 0, @streams),
   );
+}
+
+=head chain($tream1(, $tream2(, $tream3(, ...))))
+
+#TODO
+
+=cut
+
+sub chain {
+  my $class = shift;
+  my @streams = @_;
+  scalar(@streams) < 2
+    and return $streams[0];
+  Data::Enumerable::Lazy->from_list(@streams)
+    -> continue({
+        on_next => sub { $_[0]->yield($_[1]) }
+      })
+    -> grep(sub { defined $_[0] })
 }
 
 =head2 from_text_file($file(, $options))
