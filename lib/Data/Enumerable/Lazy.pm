@@ -13,10 +13,7 @@ Data::Enumerable::Lazy
 
 =head1 SYNOPSIS
 
-The library implements a lazy enumerator/generator pattern and is optimised
-for non-flat collections (resolves and flattens sub-, subsub-, ... collections).
-
-A basic lazy generator producing even numbers in a given range:
+A basic lazy range implementation picking even numbers only:
 
   my ($from, $to) = (0, 10);
   my $current = $from;
@@ -28,76 +25,25 @@ A basic lazy generator producing even numbers in a given range:
 
 =head2 DESCRIPTION
 
-This library is yet another implementation of lazy generator + enumerable
-pattern for Perl5. First of all, it is not a parallel calculation framework.
-If you are solving some parallelism problems, check out L<Generator::Object|https://metacpan.org/pod/Generator::Object>.
+This library is another one implementation of a lazy generator + enumerable
+for Perl5. It might be handy if the elements of the collection are resolved on
+the flight and the iteration itself should be hidden from the end users.
 
-This library provides some building blocks for lazy data manipulation. One
-of the key features of this library is that it abstracts the end users away
-from a multi-level nested sub-collection enumeration whereas a classical
-enumerator normally operates within a flat collection context. Think of it
-this way: this library provides a built-in functionality to resolve enumerable
-steps in micro-batches, and these micro-batches might be enumerables as well
-and so on and so forth. But it definitely does not force the micro-batched way.
+The enumerables are single-pass composable calculation units. What it means:
+An enumerable is stateful, once it reached the end of the sequence, it will
+not rewind to the beginning unless explicitly forced to.
+Enumerables are composable: one enumerable might be an extension of another by
+applying some additional logic. Enumerables resolve steps on demand, one by one.
+A single step might return another enumerable (micro batches). The library
+flattens these enumerables, so for the end user this looks like a single
+continuous sequence of elements.
 
-A quick example: let's say there is a task: read multiple plain text files
-word-by-word. This task contains several nesting enumerable loops:
-
-  -> file
-    -> line
-      -> word (we assume there is no word wrap, but it's not a problem for our model)
-
-Implemented in imperative style, the program would look like:
-
-  foreach my $file (@files) {
-    foreach my $line ($file->read_lines) {
-      foreach my $word ($line->split_words) {
-        # do something
-      }
-    }
-  }
-
-Let's say there is one more level of complexity: multi-partition setup:
-
-  foreach my $partition (@partitions) {
-    foreach my $file ($partition->ls_files) {
-      ...
-    }
-  }
-
-We have to implement the loops over and over again, exposing the internal
-knowledge about the partitions, files, lines etc. But we can do it better.
-Let's examine a lazy enumerable approach:
-
-  my $enum = Data::Enumerable::Lazy::from_list(@partitions)
-    -> continue({ on_has_next => sub { my ($self, $partition) = @_; $self->yield($partition->ls_files) } })
-    -> continue({ on_has_next => sub { my ($self, $file)      = @_; $self->yield($file->read_lines   ) } })
-    -> continue({ on_has_next => sub { my ($self, $line)      = @_; $self->yield($line->split_words  ) } });
-
-  while ($enum->has_next) {
-    my $word = $enum->next;
-    # do something
-  }
-
-The benefit is that the end user might have zero knowledge about partitions,
-files, lines, etc. Adding a new nesting loop for multi-computer fetch? Easy.
-
-The end user is focused on consuming the words, not intermediate stages.
-A wrapper library might hide the implementation details and return the
-enumerable back to the end user.
-
-Enumerables are single-pass calculation units. What it means: an enumerable is
-stateful, once it reached the end of the sequence, it will not rewind to the
-beginning.
-
-Enumerables have internal buffer: another enumerable which preserves the
-pre-fetched collection. The fig. above illustrates the buffering algorithm.
 
   [enumerable.has_next] -> [_buffer.has_next] -> yes -> return true
                                               -> no -> result = [enumerable.on_has_next] -> return result
 
   [enumerable.next] -> [_buffer.has_next] -> yes -> return [_buffer.next]
-                                          -> no -> result = [enumerable.next] -> [enumerable.set_buffer(result)] -> return _buffer.next
+                                          -> no -> result = [enumerable.next] -> [enumerable.set_buffer(result)] -> return result
 
 =head1 EXAMPLES
 
@@ -133,9 +79,9 @@ caching.
 
 Usage:
 
-  # We initialize a new range generator from 0 to 10 including.
+# We initialize a new range generator from 0 to 10 including.
   my $range = basic_range(0, 10);
-  # We check if the sequence has elements in it's tail.
+# We check if the sequence has elements in it's tail.
   while ($range->has_next) {
     # In this very line the state of $range is being changed
     say $range->next;
@@ -432,18 +378,6 @@ has is_finite => (
   default => sub { 0 },
 );
 
-=head2 extra :: Any
-
-A container to store any user-defined information.
-
-=cut
-
-has extra => (
-  is      => 'rw',
-  isa     => 'Any',
-  default => sub { +{} },
-);
-
 # Private attributes
 
 has _buff => (
@@ -527,7 +461,7 @@ sub has_next {
 
 =head2 reset()
 
-This method is a generic entry point for a enum reset. In fact, it is basically
+This method is a generic entry point for a enum reset. In fact, it is basically 
 a wrapper around user-defined C<on_reset()>.
 
 =cut
@@ -587,7 +521,7 @@ sub reduce {
   my ($self, $acc, $callback) = @_;
   croak 'Only finite enumerables might be reduced. Use is_finite=1'
     unless $self->is_finite;
-  ($acc = $callback->($acc, $self->next)) while $self->has_next;
+  ($acc = $callback->($self, $acc, $self->next)) while $self->has_next;
   return $acc;
 }
 
@@ -744,7 +678,7 @@ sub continue {
       my $self = shift;
       $self->yield($on_next->($self, $this->next));
     },
-    on_has_next => delete $ext->{on_has_next} // sub { $this->has_next() },
+    on_has_next => delete $ext->{on_has_next} // $this->on_has_next,
     is_finite   => delete $ext->{is_finite}   // $this->is_finite,
     _no_wrap    => delete $ext->{_no_wrap}    // 0,
     %ext,
@@ -830,8 +764,6 @@ so this method sets C<is_finite=1> by default.
 sub from_list {
   my $class = shift;
   my @list = @_;
-  scalar(@list)
-    or return Data::Enumerable::Lazy->empty();
   my $ix = 0;
   Data::Enumerable::Lazy->new({
     on_has_next => sub { $ix < scalar(@list) },
@@ -900,57 +832,61 @@ sub merge {
   my $class = shift;
   my @streams = @_;
   scalar @streams == 0
-    and croak 'merge function takes at least 1 stream';
+    and croak '`merge` function takes at least 1 stream';
   scalar @streams == 1
     and return shift;
-  my @full_streams = grep { $_->has_next } @streams;
-  my $ix = 0;
+  my $ixs = Data::Enumerable::Lazy->cycle(0..scalar(@streams) - 1)
+      -> take_while(sub { List::Util::any { $_->has_next } @streams })
+      -> grep(sub { $streams[ shift ]->has_next });
   Data::Enumerable::Lazy->new(
-    on_has_next => sub { List::Util::any { $_->has_next } @full_streams },
-    on_next => sub {
-      my ($self) = @_;
-      my $res;
-      while (scalar(@full_streams) > 0) {
-        my $full_streams_cnt = scalar @full_streams;
-        $ix %= $full_streams_cnt
-          if $ix >= $full_streams_cnt;
-        if ($full_streams[$ix]->has_next) {
-          $res = $full_streams[$ix]->next;
-          $ix++;
-          last;
-        } else {
-          splice(@full_streams, $ix, 1);
-          next;
-        }
-      }
-      $self->yield($res);
+    on_has_next => sub { $ixs->has_next },
+    on_next     => sub {
+      shift->yield($streams[ $ixs->next ]->next);
     },
-    _no_wrap => 1,
-    is_finite => scalar(@full_streams) ? (List::Util::reduce { $a || $b->is_finite } 0, @full_streams) : 1,
+    is_finite   => (List::Util::reduce { $a || $b->is_finite } 0, @streams),
   );
 }
 
-=head2 chain($tream1[, $tream2[, $stream3[, ...]]])
+=head2 from_text_file($file(, $options))
 
-This function builds a chain of enumerables which would be resolved one-by-one.
-Note if some substreams in the middle are infinitive, the following ones would
-never be resolved. Empty streams would be filtered out and ignored.
+#TODO
 
 =cut
 
-sub chain {
-  my ($class) = shift;
-  my @streams = @_;
-  scalar(@streams)
-    or return Data::Enumerable::Lazy->empty;
-  Data::Enumerable::Lazy->from_list(@streams)
-    -> grep(sub { $_[0]->has_next() })
-    -> continue({
-      on_next => sub {
-        $_[0]->yield($_[1]);
-      },
-      _no_wrap => 0,
-    });
+sub from_text_file {
+  my ($class, $file_handle, $options) = @_;
+  my $str = Data::Enumerable::Lazy->new(
+    on_has_next => sub { !eof($file_handle) },
+    on_next     => sub {
+      my $line = readline($file_handle);
+      $_[0]->yield($line);
+    },
+    is_finite   => $options->{is_finite} // 0,
+  );
+  if ($options->{chomp}) {
+    $str = $str->map(sub { my $s = $_[0]; chomp $s; $s });
+  }
+  return $str;
+}
+
+=head2 from_bin_file($file(, $options))
+
+#TODO
+
+=cut
+
+sub from_bin_file {
+  my ($class, $file_handle, $options) = @_;
+  my $block_size = $options->{block_size} // 1024;
+  Data::Enumerable::Lazy->new(
+    on_has_next => sub { !eof($file_handle) },
+    on_next     => sub {
+      my $buf;
+      read($file_handle, $buf, $block_size);
+      $_[0]->yield($buf);
+    },
+    is_finite   => $options->{is_finite} // 0,
+  )
 }
 
 =head1 AUTHOR
