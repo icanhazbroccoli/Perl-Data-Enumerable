@@ -285,10 +285,13 @@ grep out corrupted ones and proceed with the mesages.
 
 =cut
 
-use Moose;
-use Moose::Util::TypeConstraints;
 use Carp;
 use List::Util;
+
+sub new {
+  my ($class, $opts) = @_;
+  return bless({ _opts => $opts, _buff => undef }, $class);
+}
 
 =head1 OPTIONS
 
@@ -316,12 +319,7 @@ keeping it in a raw state by providing C<_no_wrap=1>.
 
 =cut
 
-has on_next => (
-  is      => 'ro',
-  isa     => 'CodeRef',
-  lazy    => 1,
-  default => sub { sub {} },
-);
+sub on_next { $_[0]->{_opts}->{on_next} // sub {} }
 
 =head2 on_has_next($self) :: CodeRef -> Bool
 
@@ -337,12 +335,7 @@ the middle and implement some state check login in there.
 
 =cut
 
-has on_has_next => (
-  is      => 'ro',
-  isa     => 'CodeRef',
-  lazy    => 1,
-  default => sub { sub { 0 } },
-);
+sub on_has_next { $_[0]->{_opts}->{on_has_next} // sub {0} }
 
 =head2 on_reset($self) :: CodeRef -> void
 
@@ -353,12 +346,7 @@ so the state cleanup is completely on the developer's side.
 
 =cut
 
-has on_reset => (
-  is      => 'ro',
-  isa     => 'CodeRef',
-  lazy    => 1,
-  default => sub { sub {} },
-);
+sub on_reset { $_[0]->{_opts}->{on_reset} // sub {} }
 
 =head2 is_finite :: Bool
 
@@ -371,28 +359,9 @@ methods, in this case it will create an infinite loop on the resolution.
 
 =cut
 
-has is_finite => (
-  is      => 'ro',
-  isa     => 'Bool',
-  lazy    => 1,
-  default => sub { 0 },
-);
+sub is_finite { $_[0]->{_opts}->{is_finite} // 0 }
 
-# Private attributes
-
-has _buff => (
-  is      => 'rw',
-  isa     => 'Undef | Data::Enumerable::Lazy',
-  lazy    => 1,
-  default => sub {},
-);
-
-has _no_wrap => (
-  is      => 'ro',
-  isa     => 'Bool',
-  lazy    => 1,
-  default => sub { 0 },
-);
+sub _no_wrap { $_[0]->{_opts}->{_no_wrap} // 0 }
 
 =head1 INSTANCE METHODS
 
@@ -420,12 +389,12 @@ whenever C<grep()> is applied to a stream. See C<grep()> for more details.
 sub next {
   my $self = shift;
   my $res;
-  unless ($self->_buff && $self->_buff->has_next) {
-    $res = $self->on_next->($self, @_);
-    $self->_buff($res)
-      unless $self->_no_wrap;
+  unless ($self->{_buff} && $self->{_buff}->has_next()) {
+    $res = $self->on_next()->($self, @_);
+    $self->{_buff} = $res
+      unless $self->_no_wrap();
   }
-  my $return = $self->_no_wrap ? $res : $self->_buff->next;
+  my $return = $self->_no_wrap() ? $res : $self->{_buff}->next();
   return $return;
 }
 
@@ -461,13 +430,14 @@ sub has_next {
 
 =head2 reset()
 
-This method is a generic entry point for a enum reset. In fact, it is basically 
+This method is a generic entry point for a enum reset. In fact, it is basically
 a wrapper around user-defined C<on_reset()>.
 
 =cut
 
 sub reset {
   my $self = shift;
+  $self->{_buff} = undef;
   eval { $self->on_reset(); 1 } or do {
     croak sprintf('Problem calling on_reset(): %s', $@ // 'zombie error');
   };
@@ -484,9 +454,9 @@ with C<is_finite=1> flag. An exception would be thrown otherwise.
 sub to_list {
   my ($self) = @_;
   croak 'Only finite enumerables might be converted to list. Use is_finite=1'
-    unless $self->is_finite;
+    unless $self->is_finite();
   my @acc;
-  push @acc, $self->next while $self->has_next;
+  push @acc, $self->next() while $self->has_next();
   return \@acc;
 }
 
@@ -500,10 +470,10 @@ enumerable. Works the same way as perl map {} function but it's lazy.
 sub map {
   my ($self, $callback) = @_;
   Data::Enumerable::Lazy->new({
-    on_has_next => $self->on_has_next,
-    on_next     => sub { shift->yield($callback->($self->next)) },
-    is_finite   => $self->is_finite,
-    _no_wrap    => $self->_no_wrap,
+    on_has_next => $self->on_has_next(),
+    on_next     => sub { shift->yield($callback->($self->next())) },
+    is_finite   => $self->is_finite(),
+    _no_wrap    => $self->_no_wrap(),
   });
 }
 
@@ -520,8 +490,8 @@ C<reduce()> is defined for finite enumerables only.
 sub reduce {
   my ($self, $acc, $callback) = @_;
   croak 'Only finite enumerables might be reduced. Use is_finite=1'
-    unless $self->is_finite;
-  ($acc = $callback->($acc, $self->next)) while $self->has_next;
+    unless $self->is_finite();
+  ($acc = $callback->($acc, $self->next())) while $self->has_next();
   return $acc;
 }
 
@@ -559,7 +529,7 @@ sub grep {
       my $ix = 0;
       $initialized = 1;
       undef $next;
-      while ($self->has_next) {
+      while ($self->has_next()) {
         if ($max_lookahead > 0) {
           $ix > $max_lookahead
             and do {
@@ -567,7 +537,7 @@ sub grep {
               return $prev_has_next = 0;
             };
         }
-        $next = $self->next;
+        $next = $self->next();
         $callback->($next) and last;
         undef $next;
         $ix++;
@@ -576,12 +546,12 @@ sub grep {
     },
     on_next => sub {
       my $self = shift;
-      $initialized or $self->has_next;
+      $initialized or $self->has_next();
       undef $prev_has_next;
       $self->yield($next);
     },
-    is_finite => $self->is_finite,
-    _no_wrap => $self->_no_wrap,
+    is_finite => $self->is_finite(),
+    _no_wrap => $self->_no_wrap(),
   });
 }
 
@@ -595,8 +565,8 @@ The method returns nothing.
 sub resolve {
   my ($self) = @_;
   croak 'Only finite enumerables might be resolved. Use is_finite=1'
-    unless $self->is_finite;
-  $self->next() while $self->has_next;
+    unless $self->is_finite();
+  $self->next() while $self->has_next();
 }
 
 =head2 take($N_elements)
@@ -611,7 +581,7 @@ sub take {
   my ($self, $slice_size) = @_;
   my $ix = 0;
   my @acc;
-  push @acc, $self->next while ($self->has_next && $ix++ < $slice_size);
+  push @acc, $self->next() while ($self->has_next() && $ix++ < $slice_size);
   return \@acc;
 }
 
@@ -635,8 +605,8 @@ sub take_while {
       defined $prev_has_next
         and return $prev_has_next;
       $prev_has_next = 0;
-      if ($self->has_next) {
-        $next_el = $self->next;
+      if ($self->has_next()) {
+        $next_el = $self->next();
         if ($callback->($next_el)) {
           $prev_has_next = 1;
         }
@@ -645,13 +615,13 @@ sub take_while {
     },
     on_next => sub {
       my ($new_self) = @_;
-      $initialized or $new_self->has_next;
+      $initialized or $new_self->has_next();
       $prev_has_next
-        or return $new_self->yield(Data::Enumerable::Lazy->empty);
+        or return $new_self->yield(Data::Enumerable::Lazy->empty());
       undef $prev_has_next;
       $new_self->yield($next_el);
     },
-    is_finite => $self->is_finite,
+    is_finite => $self->is_finite(),
   });
 }
 
@@ -676,10 +646,10 @@ sub continue {
   Data::Enumerable::Lazy->new({
     on_next => sub {
       my $self = shift;
-      $self->yield($on_next->($self, $this->next));
+      $self->yield($on_next->($self, $this->next()));
     },
-    on_has_next => delete $ext->{on_has_next} // $this->on_has_next,
-    is_finite   => delete $ext->{is_finite}   // $this->is_finite,
+    on_has_next => delete $ext->{on_has_next} // $this->on_has_next(),
+    is_finite   => delete $ext->{is_finite}   // $this->is_finite(),
     _no_wrap    => delete $ext->{_no_wrap}    // 0,
     %ext,
   });
@@ -699,7 +669,7 @@ sub yield {
   my $val = shift;
   my $val_is_stream = $val && ref($val) eq 'Data::Enumerable::Lazy' &&
     $val->isa('Data::Enumerable::Lazy');
-  if ($self->_no_wrap || $val_is_stream) {
+  if ($self->_no_wrap() || $val_is_stream) {
     return $val;
   } else {
     return Data::Enumerable::Lazy->singular($val);
@@ -710,12 +680,12 @@ sub yield {
 
 sub _has_next_in_buffer {
   my $self = shift;
-  defined($self->_buff) && $self->_buff->has_next;
+  defined($self->{_buff}) && $self->{_buff}->has_next();
 }
 
 sub _has_next_in_generator {
   my $self = shift;
-  $self->on_has_next->($self, @_);
+  $self->on_has_next()->($self, @_);
 }
 
 =head1 CLASS METHODS
@@ -836,15 +806,15 @@ sub merge {
   scalar @streams == 1
     and return shift;
   my $ixs = Data::Enumerable::Lazy->cycle(0..scalar(@streams) - 1)
-      -> take_while(sub { List::Util::any { $_->has_next } @streams })
-      -> grep(sub { $streams[ shift ]->has_next });
-  Data::Enumerable::Lazy->new(
-    on_has_next => sub { $ixs->has_next },
+      -> take_while(sub { List::Util::any { $_->has_next() } @streams })
+      -> grep(sub { $streams[ shift ]->has_next() });
+  Data::Enumerable::Lazy->new({
+    on_has_next => sub { $ixs->has_next() },
     on_next     => sub {
-      shift->yield($streams[ $ixs->next ]->next);
+      shift->yield($streams[ $ixs->next() ]->next());
     },
-    is_finite   => (List::Util::reduce { $a || $b->is_finite } 0, @streams),
-  );
+    is_finite   => (List::Util::reduce { $a || $b->is_finite() } 0, @streams),
+  });
 }
 
 =head chain($tream1(, $tream2(, $tream3(, ...))))
@@ -873,14 +843,14 @@ sub chain {
 
 sub from_text_file {
   my ($class, $file_handle, $options) = @_;
-  my $str = Data::Enumerable::Lazy->new(
+  my $str = Data::Enumerable::Lazy->new({
     on_has_next => sub { !eof($file_handle) },
     on_next     => sub {
       my $line = readline($file_handle);
       $_[0]->yield($line);
     },
     is_finite   => $options->{is_finite} // 0,
-  );
+  });
   if ($options->{chomp}) {
     $str = $str->map(sub { my $s = $_[0]; chomp $s; $s });
   }
@@ -896,7 +866,7 @@ sub from_text_file {
 sub from_bin_file {
   my ($class, $file_handle, $options) = @_;
   my $block_size = $options->{block_size} // 1024;
-  Data::Enumerable::Lazy->new(
+  Data::Enumerable::Lazy->new({
     on_has_next => sub { !eof($file_handle) },
     on_next     => sub {
       my $buf;
@@ -904,7 +874,7 @@ sub from_bin_file {
       $_[0]->yield($buf);
     },
     is_finite   => $options->{is_finite} // 0,
-  )
+  })
 }
 
 =head1 AUTHOR
