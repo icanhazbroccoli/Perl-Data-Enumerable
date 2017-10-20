@@ -315,7 +315,7 @@ The function is supposed to return an enumerable, in this case it would be
 kept as the buffer object. If this function method returns any other value,
 it would be wrapped in a C<Data::Enumerable::Lazy->singular()>. There is a
 way to prevent an enumerable from wrapping your return value in an enum and
-keeping it in a raw state by providing C<_no_wrap=1>.
+keeping it in a raw state by providing C<no_wrap=1>.
 
 =cut
 
@@ -361,7 +361,7 @@ methods, in this case it will create an infinite loop on the resolution.
 
 sub is_finite { $_[0]->{_opts}->{is_finite} // 0 }
 
-sub _no_wrap { $_[0]->{_opts}->{_no_wrap} // 0 }
+sub no_wrap { $_[0]->{_opts}->{no_wrap} // 0 }
 
 =head1 INSTANCE METHODS
 
@@ -392,9 +392,9 @@ sub next {
   unless ($self->{_buff} && $self->{_buff}->has_next()) {
     $res = $self->on_next()->($self, @_);
     $self->{_buff} = $res
-      unless $self->_no_wrap();
+      unless $self->no_wrap();
   }
-  my $return = $self->_no_wrap() ? $res : $self->{_buff}->next();
+  my $return = $self->no_wrap() ? $res : $self->{_buff}->next();
   return $return;
 }
 
@@ -473,7 +473,7 @@ sub map {
     on_has_next => $self->on_has_next(),
     on_next     => sub { shift->yield($callback->($self->next())) },
     is_finite   => $self->is_finite(),
-    _no_wrap    => $self->_no_wrap(),
+    no_wrap    => $self->no_wrap(),
   });
 }
 
@@ -551,7 +551,7 @@ sub grep {
       $self->yield($next);
     },
     is_finite => $self->is_finite(),
-    _no_wrap => $self->_no_wrap(),
+    no_wrap => $self->no_wrap(),
   });
 }
 
@@ -650,7 +650,7 @@ sub continue {
     },
     on_has_next => delete $ext->{on_has_next} // $this->on_has_next(),
     is_finite   => delete $ext->{is_finite}   // $this->is_finite(),
-    _no_wrap    => delete $ext->{_no_wrap}    // 0,
+    no_wrap     => delete $ext->{no_wrap}     // 0,
     %ext,
   });
 }
@@ -669,7 +669,7 @@ sub yield {
   my $val = shift;
   my $val_is_stream = $val && ref($val) eq 'Data::Enumerable::Lazy' &&
     $val->isa('Data::Enumerable::Lazy');
-  if ($self->_no_wrap() || $val_is_stream) {
+  if ($self->no_wrap() || $val_is_stream) {
     return $val;
   } else {
     return Data::Enumerable::Lazy->singular($val);
@@ -701,7 +701,7 @@ whenever a C<on_next()> step wants to return an empty resultset.
 sub empty {
   Data::Enumerable::Lazy->new({
     is_finite   => 1,
-    _no_wrap    => 1,
+    no_wrap    => 1,
   });
 }
 
@@ -719,7 +719,7 @@ sub singular {
     on_has_next => sub { not $resolved },
     on_next     => sub { $resolved = 1; shift->yield($val) },
     is_finite   => 1,
-    _no_wrap    => 1,
+    no_wrap    => 1,
   });
 }
 
@@ -739,7 +739,7 @@ sub from_list {
     on_has_next => sub { $ix < scalar(@list) },
     on_next     => sub { shift->yield($list[$ix++]) },
     is_finite   => 1,
-    _no_wrap    => 1,
+    no_wrap    => 1,
   });
 }
 
@@ -763,7 +763,7 @@ sub cycle {
       shift->yield($list[$ix++])
     },
     is_finite   => 0,
-    _no_wrap    => 1,
+    no_wrap    => 1,
   });
 }
 
@@ -780,8 +780,8 @@ sub infinity {
   Data::Enumerable::Lazy->new({
     on_has_next => sub { 1 },
     on_next     => sub {},
-    _is_finite  => 0,
-    _no_wrap    => 1,
+    is_finite  => 0,
+    no_wrap    => 1,
   });
 }
 
@@ -817,9 +817,10 @@ sub merge {
   });
 }
 
-=head chain($tream1(, $tream2(, $tream3(, ...))))
+=head2 chain($tream1(, $tream2(, $tream3(, ...))))
 
-#TODO
+Executes streams sequentually, one after another: the next stream starts once
+the previous is over.
 
 =cut
 
@@ -835,14 +836,20 @@ sub chain {
     -> grep(sub { defined $_[0] })
 }
 
-=head2 from_text_file($file(, $options))
+=head2 from_text_file($file_handle(, $options))
 
-#TODO
+Method takes an open file handle and an optional hash of options and creates a
+stream of it. The file would be read as a text file, line by line. For
+additional options see C<open()> perl core function reference.
+Options is a basic hash, supported attributes are:
+  * chomp     :: Bool | Whether the lines should be chomped, 0 by default.
+  * is_finite :: Bool | Forces the stream to be processed as finite, 0 by default.
 
 =cut
 
 sub from_text_file {
   my ($class, $file_handle, $options) = @_;
+  $options //= +{};
   my $str = Data::Enumerable::Lazy->new({
     on_has_next => sub { !eof($file_handle) },
     on_next     => sub {
@@ -857,14 +864,19 @@ sub from_text_file {
   return $str;
 }
 
-=head2 from_bin_file($file(, $options))
+=head2 from_bin_file($file_handle(, $options))
 
-#TODO
+Method similar to C<from_text_file()> but forces binary reading from file.
+Takes a file handle created by C<open()> function and an optional hash of
+options. Supported attributes are:
+  * block_size :: Integer | The size of read block, 1024 bytes by default.
+  * is_finite  :: Bool    | Forces the stream to be processed as finite, 0 by default.
 
 =cut
 
 sub from_bin_file {
   my ($class, $file_handle, $options) = @_;
+  $options //= +{};
   my $block_size = $options->{block_size} // 1024;
   Data::Enumerable::Lazy->new({
     on_has_next => sub { !eof($file_handle) },
