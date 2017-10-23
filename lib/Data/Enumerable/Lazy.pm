@@ -659,6 +659,24 @@ sub continue {
   });
 }
 
+=head2 count()
+
+Counts the number of the elements in the stream. This method iterates through
+the stream so it makes it exhausted by the end of the computatuion.
+
+=cut
+
+sub count {
+  my ($self) = @_;
+  croak 'Only finite enumerables might be counted. Use is_finite=1'
+    unless $self->is_finite();
+  my $cnt = 0;
+  for (; $self->has_next(); $self->next()) {
+    $cnt++;
+  }
+  return $cnt;
+}
+
 =head2 yield($result)
 
 This method is supposed to be called from C<on_next> callback only. This is

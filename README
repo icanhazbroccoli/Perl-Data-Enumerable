@@ -408,6 +408,11 @@ INSTANCE METHODS
     is_finite is inherited from the parent enumerable by default. All
     additional attributes would be transparently passed to the constuctor.
 
+  count()
+    Counts the number of the elements in the stream. This method iterates
+    through the stream so it makes it exhausted by the end of the
+    computatuion.
+
   yield($result)
     This method is supposed to be called from `on_next' callback only. This
     is the only valid result for an Enumerable to return the next step
