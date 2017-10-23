@@ -24,4 +24,13 @@ use Data::Enumerable::Lazy;
   is_deeply $stream->to_list, [map {$_ * $_} 0..9], 'Calculates squares';
 }
 
+{
+  my $stream = Data::Enumerable::Lazy->empty
+    -> continue({
+      on_next  => sub { fail 'This should not be called' },
+      is_finte => 1,
+    });
+  ok !defined($stream->next());
+}
+
 done_testing;

@@ -646,7 +646,11 @@ sub continue {
   Data::Enumerable::Lazy->new({
     on_next => sub {
       my $self = shift;
-      $self->yield($on_next->($self, $this->next()));
+      $self->yield(
+        $this->has_next() ?
+          $on_next->($self, $this->next()) :
+          Data::Enumerable::Lazy->empty
+      );
     },
     on_has_next => delete $ext->{on_has_next} // $this->on_has_next(),
     is_finite   => delete $ext->{is_finite}   // $this->is_finite(),
