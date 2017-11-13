@@ -2,8 +2,6 @@ package Data::Enumerable::Lazy;
 
 use 5.18.2;
 
-no autovivification 'strict';
-
 use strict;
 use warnings;
 
